@@ -1,305 +1,367 @@
 # Architektura Systemu: Biblioteka `render-doc` oraz Aplikacje Klienckie (GUI / CLI)
 
-Dokument opisuje modularną architekturę systemu do wizualizacji faktur KSeF (XML). Projekt został podzielony na:
-1. **`render-doc`**: Niezależną bibliotekę Python zawierającą logikę parsowania, detekcji wersji schematu oraz transformacji XSLT do HTML.
-2. **`render-doc-gui` / CLI**: Aplikacje użytkownika końcowego korzystające z pakietu `render-doc`.
+Dokument opisuje modularną architekturę systemu do wizualizacji dokumentów KSeF (XML). Projekt obsługuje wszystkie typy dokumentów KSeF oraz jest przygotowany na rozwój o format wyjściowy PDF.
+
+## 1. Założenia i Rozszerzalność
+
+1. **Pełna obsługa dokumentów KSeF:**
+   * Faktury VAT/Korygujące: `FA(1)`, `FA(2)`, `FA(3)` (i kolejne).
+   * Faktury VAT RR: `FA_RR(1)`.
+   * Urzędowe Poświadczenia Odbioru: `UPO`.
+2. **Architektura pod wieloformatowość:**
+   * **HTML (Priorytet 1)**: Domyślna i bezpośrednia transformacja XSLT.
+   * **PDF (Priorytet 2 / Przyszłość)**: Dedykowany moduł eksportu (np. bazujący na `WeasyPrint` lub `Playwright`), wywoływany przez spójny interfejs API.
 
 ---
 
-## 1. Diagram Architektury
+## 2. Diagram Architektury
 
 ```
 +-------------------------------------------------------+
 |                Aplikacje Klienckie                    |
 |  +-----------------------+     +-------------------+  |
-|  |   Aplikacja GUI       |     |   Skrypt CLI /    |  |
-|  | (Tkinter/CustomTkinter) |     |   Web API (FastAPI)| |
+|  |     Aplikacja GUI     |     |   Skrypt CLI /    |  |
+|  | (CustomTkinter / App) |     |  REST API (FastAPI)| |
 |  +-----------+-----------+     +---------+---------+  |
 +--------------|---------------------------|------------+
                | import render_doc         |
                v                           v
 +-------------------------------------------------------+
 |               Biblioteka `render-doc`                 |
-|  +--------------------+     +----------------------+  |
-|  | KSeFRenderer       |     | SchemaDetector       |  |
-|  +---------+----------+     +----------+-----------+  |
-|            |                           |              |
-|            v                           v              |
+|                                                       |
 |  +-------------------------------------------------+  |
-|  |           Silnik XSLT (lxml)                    |  |
-|  |  [ Wbudowane zasoby XSLT: FA(1), FA(2), ... ]    |  |
-|  +-------------------------------------------------+  |
+|  |                   KSeFRenderer                  |  |
+|  |   - render_to_html(...)                         |  |
+|  |   - render_to_pdf(...)  [Planowane]             |  |
+|  +---------+-------------------+-------------------+  |
+|            |                   |                      |
+|            v                   v                      |
+|  +-------------------+   +-------------------------+  |
+|  |  SchemaDetector   |   |   Exporters Strategy    |  |
+|  | (FA, FA_RR, UPO)  |   | - HTMLExporter (XSLT)   |  |
+|  +-------------------+   | - PDFExporter (Future)  |  |
+|                          +-------------------------+  |
 +-------------------------------------------------------+
 ```
 
 ---
 
-## 2. Biblioteka `render-doc` (Core Package)
-
-### 2.1 Struktura katalogów biblioteki
+## 3. Struktura Katalogów Biblioteki `render-doc`
 
 ```
 render_doc/
-├── pyproject.toml               # Konfiguracja pakietowania (Flit / Hatch / Setuptools)
+├── pyproject.toml               # Konfiguracja pakietowania
 ├── README.md
 └── src/
     └── render_doc/
-        ├── __init__.py          # Główny interfejs API biblioteki
-        ├── exceptions.py        # Dedykowane wyjątki
-        ├── detector.py          # Logika rozpoznawania przestrzeni nazw XML
-        ├── renderer.py          # Główna klasa KSeFRenderer
-        └── resources/           # Wbudowane szablony XSLT
+        ├── __init__.py          # Główny interfejs API
+        ├── enums.py             # Typy dokumentów i formaty wyjściowe
+        ├── exceptions.py        # Wyjątki
+        ├── detector.py          # Automatyczna detekcja typu dokumentu KSeF
+        ├── renderer.py          # Klasa orchestratora KSeFRenderer
+        ├── exporters/           # Silniki wyjściowe (HTML, PDF)
+        │   ├── __init__.py
+        │   ├── base.py          # Interfejs abstrakcyjny BaseExporter
+        │   ├── html_exporter.py # Transformator XSLT do HTML
+        │   └── pdf_exporter.py  # [Future] Konwerter HTML -> PDF
+        └── resources/           # Szablony XSLT dla wszystkich typów dokumentów
             ├── FA_1.xslt
-            └── FA_2.xslt
+            ├── FA_2.xslt
+            ├── FA_RR_1.xslt
+            └── UPO.xslt
 ```
 
-### 2.2 Kod źródłowy biblioteki
+---
 
-#### `src/render_doc/exceptions.py`
+## 4. Kod Źródłowy Biblioteki (Prototyp Modułów)
+
+### 4.1 Enumy i Wyjątki (`enums.py`, `exceptions.py`)
+
 ```python
+# src/render_doc/enums.py
+from enum import Enum, auto
+
+class KSeFDocType(Enum):
+    FA_1 = "FA(1)"
+    FA_2 = "FA(2)"
+    FA_RR_1 = "FA_RR(1)"
+    UPO = "UPO"
+    UNKNOWN = "UNKNOWN"
+
+class OutputFormat(Enum):
+    HTML = "html"
+    PDF = "pdf"
+```
+
+```python
+# src/render_doc/exceptions.py
 class RenderDocError(Exception):
     """Bazowy wyjątek dla biblioteki render-doc."""
     pass
 
 class UnsupportedSchemaError(RenderDocError):
-    """Rzucany, gdy przestrzeń nazw XML faktury nie jest obsługiwana."""
+    """Rzucany, gdy przestrzeń nazw XML nie odpowiada żadnemu znanemu schematowi KSeF."""
     pass
 
-class XSLTNotFoundError(RenderDocError):
-    """Rzucany, gdy brakuje odpowiedniego arkusza XSLT."""
+class ExportError(RenderDocError):
+    """Błąd podczas generowania pliku wyjściowego (HTML/PDF)."""
     pass
 ```
 
-#### `src/render_doc/detector.py`
+---
+
+### 4.2 Detektor Schematów KSeF (`detector.py`)
+
+Rozpoznaje typ dokumentu (faktura podstawowa, faktura RR, poświadczenie UPO) na podstawie root tagu oraz przestrzeni nazw (xmlns):
+
 ```python
+# src/render_doc/detector.py
 from lxml import etree
+from .enums import KSeFDocType
 from .exceptions import UnsupportedSchemaError
 
-# Mapowanie namespace XML KSeF na nazwy zasobów XSLT
-KNOWN_NAMESPACES = {
-    "http://crd.gov.pl/wzor/2021/11/29/11089/": "FA_1.xslt",
-    "http://crd.gov.pl/wzor/2023/06/29/12648/": "FA_2.xslt",
+# Mapa przestrzeni nazw (xmlns) oraz tagów głównych na typy dokumentów KSeF
+NAMESPACE_MAP = {
+    # Faktury VAT
+    "http://crd.gov.pl/wzor/2021/11/29/11089/": (KSeFDocType.FA_1, "FA_1.xslt"),
+    "http://crd.gov.pl/wzor/2023/06/29/12648/": (KSeFDocType.FA_2, "FA_2.xslt"),
+    
+    # Faktury RR
+    "http://crd.gov.pl/wzor/2024/02/08/13310/": (KSeFDocType.FA_RR_1, "FA_RR_1.xslt"),
+    
+    # UPO (Urzędowe Poświadczenie Odbioru)
+    "http://ksef.mf.gov.pl/schema/gtw/svc/types/2021/10/01/0001": (KSeFDocType.UPO, "UPO.xslt"),
+    "http://crd.gov.pl/wzor/2023/12/19/13143/": (KSeFDocType.UPO, "UPO.xslt"),
 }
+
+class DocumentInfo:
+    def __init__(self, doc_type: KSeFDocType, xslt_filename: str):
+        self.doc_type = doc_type
+        self.xslt_filename = xslt_filename
 
 class SchemaDetector:
     @staticmethod
-    def detect_xslt_filename(xml_bytes: bytes) -> str:
-        """Rozpoznaje wersję schematu KSeF na podstawie przestrzeni nazw (xmlns)."""
+    def detect(xml_bytes: bytes) -> DocumentInfo:
+        """Skanuje plik XML i zwraca rozpoznany typ dokumentu oraz przypisany plik XSLT."""
         try:
             parser = etree.XMLParser(recover=True)
             root = etree.fromstring(xml_bytes, parser=parser)
             namespace = root.nsmap.get(None)
 
-            if not namespace or namespace not in KNOWN_NAMESPACES:
-                raise UnsupportedSchemaError(f"Nieobsługiwana lub brakująca przestrzeń nazw XML: {namespace}")
+            if namespace in NAMESPACE_MAP:
+                doc_type, xslt_file = NAMESPACE_MAP[namespace]
+                return DocumentInfo(doc_type, xslt_file)
 
-            return KNOWN_NAMESPACES[namespace]
+            # Próba weryfikacji po tagu głównym (fallback np. dla UPO)
+            tag_name = etree.QName(root).localname
+            if tag_name == "Potwierdzenie" or tag_name == "UPO":
+                return DocumentInfo(KSeFDocType.UPO, "UPO.xslt")
+
+            raise UnsupportedSchemaError(f"Nieobsługiwany dokument KSeF (xmlns: {namespace}, tag: {tag_name})")
         except etree.XMLSyntaxError as e:
-            raise UnsupportedSchemaError(f"Niepoprawny plik XML: {e}")
+            raise UnsupportedSchemaError(f"Błąd składni XML: {e}")
 ```
 
-#### `src/render_doc/renderer.py`
+---
+
+### 4.3 Silnik Eksportu (`exporters/`)
+
+Stosujemy wzorzec **Strategii** – oddzielamy silnik renderowania HTML od przyszłego modułu generowania PDF.
+
 ```python
-from pathlib import Path
+# src/render_doc/exporters/base.py
+from abc import ABC, abstractmethod
 from typing import Union
-import importlib.resources
+from pathlib import Path
+
+class BaseExporter(ABC):
+    @abstractmethod
+    def export(self, xml_bytes: bytes, xslt_bytes: bytes) -> str:
+        """Przekształca XML do postaci tekstowej (np. HTML)."""
+        pass
+```
+
+```python
+# src/render_doc/exporters/html_exporter.py
 from lxml import etree
+from .base import BaseExporter
+from ..exceptions import ExportError
+
+class HTMLExporter(BaseExporter):
+    def export(self, xml_bytes: bytes, xslt_bytes: bytes) -> str:
+        try:
+            xml_doc = etree.fromstring(xml_bytes)
+            xslt_doc = etree.fromstring(xslt_bytes)
+            
+            transform = etree.XSLT(xslt_doc)
+            result_tree = transform(xml_doc)
+            return str(result_tree)
+        except Exception as e:
+            raise ExportError(f"Błąd transformacji XSLT do HTML: {e}")
+```
+
+```python
+# src/render_doc/exporters/pdf_exporter.py
+# [Moduł przygotowany pod przyszły rozwój]
+from .base import BaseExporter
+from ..exceptions import ExportError
+
+class PDFExporter(BaseExporter):
+    def export(self, xml_bytes: bytes, xslt_bytes: bytes) -> bytes:
+        """
+        Planowana implementacja:
+        1. Wygenerowanie HTML przy użyciu HTMLExporter.
+        2. Przekształcenie HTML na PDF (np. za pomocą WeasyPrint, Playwright lub pdfkit).
+        """
+        raise NotImplementedError("Eksport do formatu PDF będzie dostępny w kolejnej wersji biblioteki.")
+```
+
+---
+
+### 4.4 Główny Interfejs `KSeFRenderer` (`renderer.py`)
+
+```python
+# src/render_doc/renderer.py
+from pathlib import Path
+from typing import Union, Optional
+import importlib.resources
 
 from .detector import SchemaDetector
-from .exceptions import XSLTNotFoundError
+from .enums import OutputFormat, KSeFDocType
+from .exceptions import XSLTNotFoundError, RenderDocError
+from .exporters.html_exporter import HTMLExporter
+from .exporters.pdf_exporter import PDFExporter
 
 class KSeFRenderer:
-    """Główna klasa odpowiadająca za renderowanie faktur KSeF do formatu HTML."""
+    """Główna klasa fasady do obsługi wizualizacji dokumentów KSeF."""
 
-    def __init__(self, custom_xslt_dir: Union[Path, str, None] = None):
+    def __init__(self, custom_xslt_dir: Optional[Union[Path, str]] = None):
         self.custom_xslt_dir = Path(custom_xslt_dir) if custom_xslt_dir else None
+        self.html_exporter = HTMLExporter()
+        self.pdf_exporter = PDFExporter()
 
-    def _get_xslt_content(self, xslt_filename: str) -> bytes:
-        """Pobiera zawartość pliku XSLT z dostosowanego katalogu lub z wbudowanych zasobów pakietu."""
+    def _load_xslt(self, xslt_filename: str) -> bytes:
         if self.custom_xslt_dir:
             custom_file = self.custom_xslt_dir / xslt_filename
             if custom_file.exists():
                 return custom_file.read_bytes()
 
-        # Pobieranie z wbudowanych zasobów pakietu (importlib.resources)
         try:
             res_path = importlib.resources.files("render_doc.resources").joinpath(xslt_filename)
             return res_path.read_bytes()
         except Exception as e:
-            raise XSLTNotFoundError(f"Nie znaleziono szablonu XSLT '{xslt_filename}': {e}")
+            raise XSLTNotFoundError(f"Nie odnaleziono szablonu XSLT '{xslt_filename}': {e}")
 
-    def render_xml_to_html(self, xml_content: Union[str, bytes]) -> str:
-        """Przekształca surowy tekst/bajty XML faktury na ciąg HTML."""
+    def render(self, xml_content: Union[str, bytes], fmt: OutputFormat = OutputFormat.HTML) -> Union[str, bytes]:
+        """Uniwersalna metoda renderująca dokument do wskazanego formatu."""
         xml_bytes = xml_content.encode("utf-8") if isinstance(xml_content, str) else xml_content
+        doc_info = SchemaDetector.detect(xml_bytes)
+        xslt_bytes = self._load_xslt(doc_info.xslt_filename)
 
-        # 1. Detekcja schematu
-        xslt_filename = SchemaDetector.detect_xslt_filename(xml_bytes)
+        if fmt == OutputFormat.HTML:
+            return self.html_exporter.export(xml_bytes, xslt_bytes)
+        elif fmt == OutputFormat.PDF:
+            return self.pdf_exporter.export(xml_bytes, xslt_bytes)
+        else:
+            raise RenderDocError(f"Nieobsługiwany format wyjściowy: {fmt}")
 
-        # 2. Wczytanie XSLT
-        xslt_bytes = self._get_xslt_content(xslt_filename)
+    def render_file_to_file(
+        self, 
+        xml_path: Union[Path, str], 
+        output_path: Union[Path, str], 
+        fmt: OutputFormat = OutputFormat.HTML
+    ) -> Path:
+        """Wczytuje plik XML z dysku i zapisuje wygenerowany wynik (HTML/PDF)."""
+        xml_p = Path(xml_path)
+        out_p = Path(output_path)
 
-        # 3. Transformacja XSLT
-        xml_doc = etree.fromstring(xml_bytes)
-        xslt_doc = etree.fromstring(xslt_bytes)
+        result = self.render(xml_p.read_bytes(), fmt=fmt)
 
-        transform = etree.XSLT(xslt_doc)
-        result_tree = transform(xml_doc)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(result, str):
+            out_p.write_text(result, encoding="utf-8")
+        else:
+            out_p.write_bytes(result)
 
-        return str(result_tree)
-
-    def render_file_to_html_file(self, xml_file_path: Union[Path, str], output_html_path: Union[Path, str]) -> Path:
-        """Przetwarza plik XML z dysku i zapisuje wynikowy plik HTML."""
-        xml_path = Path(xml_file_path)
-        out_path = Path(output_html_path)
-
-        xml_bytes = xml_path.read_bytes()
-        html_str = self.render_xml_to_html(xml_bytes)
-
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(html_str, encoding="utf-8")
-
-        return out_path
-```
-
-#### `src/render_doc/__init__.py`
-```python
-from .renderer import KSeFRenderer
-from .exceptions import RenderDocError, UnsupportedSchemaError, XSLTNotFoundError
-
-__version__ = "0.1.0"
-__all__ = ["KSeFRenderer", "RenderDocError", "UnsupportedSchemaError", "XSLTNotFoundError"]
+        return out_p
 ```
 
 ---
 
-## 3. Aplikacja Graficzna (GUI Client)
+## 5. Przykładowa Integracja w GUI (`gui_app.py`)
 
-Aplikacja z interfejsem użytkownika importuje pakiet `render_doc` i zapewnia wygodne przeciąganie plików (Drag & Drop) lub wybór pliku przyciskiem, a następnie automatyczne otwieranie wyrenderowanego podglądu w przeglądarce.
-
-### Wymagania GUI:
-* `customtkinter` (nowoczesny wygląd Tkinter)
-* `webbrowser` (do otwierania przeglądarki)
-
-### Przykładowy kod `gui_app.py`:
+Aplikacja kliencka rozpoznaje typ pliku i wyświetla odpowiedni komunikat oraz pozwala na wybór opcji podglądu:
 
 ```python
-import os
-import sys
 import tempfile
 import webbrowser
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
-# Import naszej biblioteki
-from render_doc import KSeFRenderer, RenderDocError
+from render_doc import KSeFRenderer, OutputFormat, RenderDocError
 
-class KSeFViewerApp(ctk.CTk):
+class KSeFMultiDocApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-
-        self.title("KSeF Faktura Viewer (render-doc GUI)")
-        self.geometry("500x300")
-        ctk.set_appearance_mode("System")
-        ctk.set_default_color_theme("blue")
-
+        self.title("KSeF Universal Document Viewer")
+        self.geometry("550x350")
+        
         self.renderer = KSeFRenderer()
 
-        # Układ elementów
         self.label = ctk.CTkLabel(
             self, 
-            text="Wybierz plik XML faktury KSeF\naby otworzyć podgląd HTML", 
-            font=("Arial", 16)
+            text="Przeglądarka Dokumentów KSeF\n(Faktury FA, FA_RR oraz UPO)", 
+            font=("Arial", 16, "bold")
         )
-        self.label.pack(pady=40)
+        self.label.pack(pady=30)
 
         self.btn_select = ctk.CTkButton(
             self, 
-            text="Otwórz plik XML...", 
-            command=self.select_and_render_file
+            text="Wybierz plik XML (FA / UPO)...", 
+            command=self.process_file
         )
-        self.btn_select.pack(pady=10)
+        self.btn_select.pack(pady=15)
 
-        self.status_label = ctk.CTkLabel(self, text="", font=("Arial", 12), text_color="gray")
+        self.status_label = ctk.CTkLabel(self, text="Gotowy", font=("Arial", 12), text_color="gray")
         self.status_label.pack(pady=20)
 
-    def select_and_render_file(self):
+    def process_file(self):
         file_path = filedialog.askopenfilename(
-            title="Wybierz fakturę KSeF XML",
-            filetypes=[("Pliki XML", "*.xml"), ("Wszystkie pliki", "*.*")]
+            title="Wybierz dokument KSeF (XML)",
+            filetypes=[("Pliki XML", "*.xml")]
         )
-
         if not file_path:
             return
 
         try:
-            self.status_label.configure(text="Przetwarzanie...", text_color="blue")
-            self.update_idletasks()
+            # Zapis wyrenderowanego podglądu HTML do folderu tymczasowego
+            temp_dir = Path(tempfile.gettempdir()) / "ksef_docs_view"
+            out_html = temp_dir / f"{Path(file_path).stem}.html"
 
-            # Zapis podglądu do katalogu tymczasowego
-            temp_dir = Path(tempfile.gettempdir()) / "ksef_views"
-            output_html = temp_dir / f"{Path(file_path).stem}.html"
+            # Renderowanie przy użyciu biblioteki
+            self.renderer.render_file_to_file(file_path, out_html, fmt=OutputFormat.HTML)
 
-            # Użycie biblioteki render-doc
-            self.renderer.render_file_to_html_file(file_path, output_html)
-
-            # Otwarcie w przeglądarce
-            webbrowser.open(output_html.resolve().as_uri())
+            # Otwarcie w domyślnej przeglądarce
+            webbrowser.open(out_html.resolve().as_uri())
             
             self.status_label.configure(
-                text=f"Sukces! Otwarto podgląd: {output_html.name}", 
+                text=f"Wyrenderowano i otwarto: {out_html.name}", 
                 text_color="green"
             )
-
         except RenderDocError as e:
-            messagebox.showerror("Błąd konwersji KSeF", str(e))
-            self.status_label.configure(text="Błąd przetwarzania.", text_color="red")
-        except Exception as e:
-            messagebox.showerror("Błąd niespodziewany", f"Wystąpił błąd: {e}")
-            self.status_label.configure(text="Błąd systemowy.", text_color="red")
+            messagebox.showerror("Błąd KSeF", str(e))
+            self.status_label.configure(text="Błąd dokumentu.", text_color="red")
 
 if __name__ == "__main__":
-    app = KSeFViewerApp()
+    app = KSeFMultiDocApp()
     app.mainloop()
 ```
 
 ---
 
-## 4. Przykład Użycia CLI / Skryptu konsolowego
+## 6. Podsumowanie Wprowadzonych Zmian
 
-Dzięki wydzieleniu biblioteki można w prosty sposób stworzyć również narzędzie do pracy w konsoli:
-
-```python
-# cli_app.py
-import sys
-import webbrowser
-from pathlib import Path
-from render_doc import KSeFRenderer
-
-def main():
-    if len(sys.argv) < 2:
-        print("Użycie: python cli_app.py <sciezka_do_faktury.xml>")
-        sys.exit(1)
-
-    xml_path = Path(sys.argv[1])
-    output_html = Path("output") / f"{xml_path.stem}.html"
-
-    renderer = KSeFRenderer()
-    
-    print(f"Renderowanie {xml_path}...")
-    renderer.render_file_to_html_file(xml_path, output_html)
-    
-    print(f"Wygenerowano: {output_html.resolve()}")
-    webbrowser.open(output_html.resolve().as_uri())
-
-if __name__ == "__main__":
-    main()
-```
-
----
-
-## 5. Korzyści z rozdzielenia na bibliotekę `render-doc`
-
-1. **Reużywalność (Reusability):** Bibliotekę `render-doc` można łatwo zainstalować przez `pip` w dowolnym innym projekcie Python (np. serwerze webowym Django/FastAPI, automatycznym konwerterze mailowym, botach księgowych).
-2. **Łatwość testowania (Testability):** Logikę transformacji XML $\rightarrow$ HTML można testować jednostkowo (`pytest`) bez konieczności uruchamiania interfejsu graficznego.
-3. **Izolacja odpowiedzialności:** Zmiany w wyglądzie interfejsu GUI nie wpływają na silnik konwersji i vice versa.
+1. **Obsługa wszystkich schematów KSeF:** `SchemaDetector` klasyfikuje dokumenty na podstawie ich unikalnych przestrzeni nazw oraz tagów korzenia XML (`FA_1`, `FA_2`, `FA_RR_1`, `UPO`).
+2. **Gotowość na eksport PDF:** Wprowadzono enum `OutputFormat` oraz wzorzec Exportera. Przyszłe wdrożenie generatora PDF sprowadzi się do zaimplementowania klasy `PDFExporter` bez konieczności przebudowywania aplikacji GUI czy interfejsu API.
+3. **Elastyczność zasobów:** Możliwość dodawania kolejnych arkuszy stylów XSLT bezpośrednio w folderze `resources/`.
