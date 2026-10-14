@@ -65,6 +65,23 @@ html = render_fa3_html(Path("faktura.xml").read_bytes())
 Path("faktura.html").write_text(html, encoding="utf-8")
 ```
 
+Opcjonalnie numer KSeF można przekazać jako metadane od wywołującego. Poniższy
+przykład używa wyłącznie syntetycznego numeru testowego, nie rzeczywistego numeru
+KSeF:
+
+```python
+from render_doc import render_fa3_html
+
+html = render_fa3_html(
+    xml_bytes,
+    ksef_number="5860000000-20261014-TEST",  # wartość syntetyczna
+)
+```
+
+Bez parametru `ksef_number` renderer zachowuje dotychczasowe zachowanie i wynik.
+Numer pochodzi od wywołującego; renderer nie odczytuje go z XML ani nie
+komunikuje się z KSeF.
+
 Publiczne API przyjmuje bytes. `InvalidXmlError` oznacza błąd parsowania lub
 odrzucony DTD, a `UnsupportedDocumentError` — dokument poza obsługiwanym
 profilem. Oba wyjątki oraz bazowy `RenderDocError` są dostępne z `render_doc`.

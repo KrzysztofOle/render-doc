@@ -342,8 +342,15 @@ def _e(value: str) -> str:
     return escape(value, quote=True)
 
 
-def render_fa3_html(xml_bytes: bytes) -> str:
-    """Render an explicitly supported FA(3) XML invoice profile as HTML."""
+def render_fa3_html(
+    xml_bytes: bytes,
+    *,
+    ksef_number: str | None = None,
+) -> str:
+    """Render a supported FA(3) XML invoice profile as HTML."""
+    if ksef_number is not None and not isinstance(ksef_number, str):
+        raise TypeError("ksef_number must be str or None")
+
     data, rows, summary, additional_descriptions = _parse_invoice(xml_bytes)
     line_html = "\n".join(
         "<tr>"
@@ -383,6 +390,12 @@ def render_fa3_html(xml_bytes: bytes) -> str:
         if data["delivery_date"]
         else ""
     )
+    ksef_number_html = (
+        "\n<section><h2>Identyfikacja KSeF</h2><p><strong>Numer KSeF:</strong> "
+        f"{_e(ksef_number)}</p></section>"
+        if ksef_number is not None
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="pl">
 <head>
@@ -404,7 +417,7 @@ th {{ background: #eef2f5; }}
 </style>
 </head>
 <body>
-<header><h1>Faktura</h1><p><strong>Numer:</strong> {_e(data["number"])}<br><strong>Data wystawienia:</strong> {_e(data["issue_date"])}{delivery_date_html}</p></header>
+<header><h1>Faktura</h1><p><strong>Numer:</strong> {_e(data["number"])}<br><strong>Data wystawienia:</strong> {_e(data["issue_date"])}{delivery_date_html}</p></header>{ksef_number_html}
 <div class="parties">
 <section><h2>Sprzedawca</h2><p>{_e(data["seller"])}<br>{seller_address}</p></section>
 <section><h2>Nabywca</h2><p>{_e(data["buyer"])}<br>{buyer_address}</p></section>

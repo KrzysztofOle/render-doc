@@ -11,6 +11,21 @@ html = render_fa3_html(Path("faktura.xml").read_bytes())
 Path("faktura.html").write_text(html, encoding="utf-8")
 ```
 
+Numer KSeF jest opcjonalnym metadatum od wywołującego. Przykład używa
+syntetycznej wartości testowej, a nie rzeczywistego numeru:
+
+```python
+from render_doc import render_fa3_html
+
+html = render_fa3_html(
+    xml_bytes,
+    ksef_number="5860000000-20261014-TEST",  # wartość syntetyczna
+)
+```
+
+Pomijając `ksef_number`, zachowujesz dotychczasowe zachowanie API. Renderer nie
+wyprowadza numeru z XML i nie komunikuje się z KSeF.
+
 Funkcja przyjmuje `bytes` i zwraca kompletny dokument HTML w `str`. Błędny
 XML powoduje `InvalidXmlError`; poprawny składniowo dokument spoza obsługiwanego
 profilu powoduje `UnsupportedDocumentError`. Wyjątki można importować z

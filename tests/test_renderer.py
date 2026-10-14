@@ -82,6 +82,51 @@ def test_renders_supported_invoice_fields(invoice_xml: bytes) -> None:
     assert "<dt>Warunki</dt><dd>Standardowe</dd>" in html
 
 
+def test_legacy_call_matches_explicit_none(invoice_xml: bytes) -> None:
+    assert render_fa3_html(invoice_xml) == render_fa3_html(
+        invoice_xml, ksef_number=None
+    )
+
+
+def test_ksef_number_requires_text_or_none(invoice_xml: bytes) -> None:
+    with pytest.raises(TypeError, match="ksef_number must be str or None"):
+        render_fa3_html(invoice_xml, ksef_number=123)  # type: ignore[arg-type]
+
+
+def test_renders_synthetic_ksef_number(invoice_xml: bytes) -> None:
+    html = render_fa3_html(
+        invoice_xml, ksef_number="5860000000-20261014-TEST"
+    )
+
+    assert (
+        "<h2>Identyfikacja KSeF</h2><p><strong>Numer KSeF:</strong> "
+        "5860000000-20261014-TEST</p>"
+    ) in html
+
+
+def test_ksef_number_is_escaped_as_untrusted_html(invoice_xml: bytes) -> None:
+    html = render_fa3_html(
+        invoice_xml,
+        ksef_number='TEST<&"<script>alert(1)</script>',
+    )
+
+    assert "TEST&lt;&amp;&quot;&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "<script>" not in html
+    assert "alert(1)</script>" not in html
+
+
+def test_ksef_number_rendering_is_deterministic_and_does_not_modify_xml(
+    invoice_xml: bytes,
+) -> None:
+    original = bytes(invoice_xml)
+
+    first = render_fa3_html(invoice_xml, ksef_number="SYNTHETIC-KSEF-001")
+    second = render_fa3_html(invoice_xml, ksef_number="SYNTHETIC-KSEF-001")
+
+    assert first == second
+    assert invoice_xml == original
+
+
 def test_p6_is_rendered_even_when_equal_to_issue_date(invoice_xml: bytes) -> None:
     html = render_fa3_html(invoice_xml)
     assert "Data dostawy lub wykonania usługi:</strong> 2026-10-14" in html
@@ -241,6 +286,11 @@ def test_non_fa3_structure_is_rejected() -> None:
         render_fa3_html(b"<UPO/>")
 
 
+def test_non_fa3_structure_remains_rejected_with_ksef_number() -> None:
+    with pytest.raises(UnsupportedDocumentError, match="elementem Faktura"):
+        render_fa3_html(b"<UPO/>", ksef_number="SYNTHETIC-KSEF-001")
+
+
 def test_mixed_vat_rows_and_summary_are_rendered(invoice_xml: bytes) -> None:
     second_row = """<FaWiersz><NrWierszaFa>3</NrWierszaFa><P_7>Stawka obniżona</P_7>
       <P_8A>szt.</P_8A><P_8B>1</P_8B><P_9A>50.00</P_9A><P_11>50.00</P_11><P_12>8</P_12></FaWiersz>""".encode()
@@ -286,10 +336,15 @@ def test_supported_rates_and_zero_rate_variants(
             summary += f"<{tax_field}>{source_rate}.00</{tax_field}>"
         altered = altered.replace(b"<P_15>", f"{summary}<P_15>".encode())
     html = render_fa3_html(altered)
+    html_with_number = render_fa3_html(
+        altered, ksef_number="SYNTHETIC-KSEF-001"
+    )
     assert label in html
     assert f"Netto {label}</span><strong>100.00 PLN" in html
     if source_rate.startswith("0 "):
         assert "VAT 0%" not in html
+    assert f"Netto {label}</span><strong>100.00 PLN" in html_with_number
+    assert "Kwota należności ogółem</span><strong>123.00 PLN" in html_with_number
 
 
 def test_multiple_rows_preserve_xml_order_and_source_numbers(
