@@ -38,6 +38,13 @@ są odrzucane. W `Podmiot2` wymagane są pola `JST=2` i `GV=2`; oznaczają one,
 `1` oraz inne wartości są odrzucane. `Podmiot3` pozostaje nieobsługiwany.
 Renderer pokazuje `P_2`, `P_1`, dane `Podmiot1`/`Podmiot2` oraz
 pola wiersza `NrWierszaFa`, `P_7`, `P_8A`, `P_8B`, `P_9A`, `P_11`, `P_12`.
+Opcjonalne `P_6` jest walidowane jako data FA(3) i wyświetlane osobno jako data
+dostawy lub wykonania usługi, również gdy jest równe `P_1`. Akceptowany jest
+zamknięty zestaw nieaktywnych oznaczeń `Adnotacje` (wartości `2` dla `P_16`,
+`P_17`, `P_18`, `P_18A`, `P_23` oraz znaczniki `P_19N`, `P_22N`, `P_PMarzyN`
+o wartości `1`); aktywne lub nieznane warianty są odrzucane. Ogólne wpisy
+`DodatkowyOpis` z `Klucz` i `Wartosc` są prezentowane w kolejności źródłowej;
+wpisy z `NrWiersza` pozostają nieobsługiwane.
 
 Podsumowanie wartości netto i VAT pochodzi z `P_13_1`/`P_14_1` (23%),
 `P_13_2`/`P_14_2` (8%) oraz `P_13_3`/`P_14_3` (5%). Dla wariantów 0% netto

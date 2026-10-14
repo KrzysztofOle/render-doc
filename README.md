@@ -24,11 +24,15 @@ nie definiuje dla nich osobnych sumarycznych pól VAT. Należność ogółem jes
 prezentowana z `P_15` bez przeliczania.
 
 To ograniczony profil, a nie walidator XSD ani pełna obsługa FA(3). Renderer
-odrzuca inne waluty, stawki i warianty 0%, rodzaje faktury, dodatkowe pola i warianty, które
+prezentuje opcjonalne `P_6` jako osobną datę dostawy lub wykonania usługi,
+zachowując je także wtedy, gdy jest równe `P_1`. Weryfikuje zamknięty zestaw
+nieaktywnych oznaczeń `Adnotacje` i prezentuje ogólne wpisy `DodatkowyOpis`
+złożone z `Klucz` i `Wartosc`; warianty przypisane do wierszy są odrzucane.
+Odrzuca inne waluty, stawki i warianty 0%, rodzaje faktury, dodatkowe pola i warianty, które
 mogłyby zmienić znaczenie prezentacji. Nie obsługuje faktur korygujących,
 zaliczkowych, uproszczonych, marży, rabatów ani kategorii VAT poza wskazanymi
-powyżej. Inne struktury KSeF i dane dodatkowe nie są obecnie prezentowane. HTML jest
-samowystarczalny, używa osadzonego CSS, nie zawiera JavaScriptu ani zasobów
+powyżej. Pozostałe struktury KSeF i warianty danych dodatkowych są odrzucane.
+HTML jest samowystarczalny, używa osadzonego CSS, nie zawiera JavaScriptu ani zasobów
 zewnętrznych. Nie deklarujemy zgodności z generatorem MF ani z polem
 `CDN.DokumentyKSeF.DKF_Html` Optimy.
 

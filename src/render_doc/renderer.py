@@ -88,6 +88,69 @@ def _decimal(parent: etree._Element, name: str) -> str:
     return value
 
 
+def _fa3_date(parent: etree._Element, name: str) -> str:
+    value = _text(parent, name)
+    try:
+        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+            raise ValueError
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise UnsupportedDocumentError(
+            f"Pole {name} nie zawiera prawidłowej daty FA(3)."
+        ) from exc
+    return value
+
+
+def _validate_annotations(invoice: etree._Element) -> None:
+    annotations = invoice.findall(_qualified(invoice, "Adnotacje"))
+    if len(annotations) > 1:
+        raise UnsupportedDocumentError("Pole Adnotacje występuje wielokrotnie.")
+    if not annotations:
+        return
+    node = annotations[0]
+    _children(
+        node,
+        {
+            "P_16",
+            "P_17",
+            "P_18",
+            "P_18A",
+            "Zwolnienie",
+            "NoweSrodkiTransportu",
+            "P_23",
+            "PMarzy",
+        },
+    )
+    for field in ("P_16", "P_17", "P_18", "P_18A", "P_23"):
+        if _text(node, field) != "2":
+            raise UnsupportedDocumentError(
+                f"Obsługiwana jest wyłącznie nieaktywna wartość 2 w polu {field}."
+            )
+    for group, marker in (
+        ("Zwolnienie", "P_19N"),
+        ("NoweSrodkiTransportu", "P_22N"),
+        ("PMarzy", "P_PMarzyN"),
+    ):
+        child = _one(node, group)
+        _children(child, {marker})
+        if _text(child, marker) != "1":
+            raise UnsupportedDocumentError(
+                f"Obsługiwany jest wyłącznie znacznik braku {marker}=1."
+            )
+
+
+def _additional_descriptions(
+    invoice: etree._Element,
+) -> list[dict[str, str]]:
+    descriptions: list[dict[str, str]] = []
+    for description in invoice.findall(_qualified(invoice, "DodatkowyOpis")):
+        _children(description, {"Klucz", "Wartosc"})
+        descriptions.append(
+            {"key": _text(description, "Klucz"), "value": _text(description, "Wartosc")}
+        )
+    return descriptions
+
+
 _VAT_RATES = {
     "23": ("23%", "P_13_1", "P_14_1"),
     "8": ("8%", "P_13_2", "P_14_2"),
@@ -134,7 +197,12 @@ def _party(
 
 def _parse_invoice(
     xml_bytes: bytes,
-) -> tuple[dict[str, object], list[dict[str, str]], list[dict[str, str | None]]]:
+) -> tuple[
+    dict[str, object],
+    list[dict[str, str]],
+    list[dict[str, str | None]],
+    list[dict[str, str]],
+]:
     if not isinstance(xml_bytes, bytes):
         raise TypeError("xml_bytes musi mieć typ bytes.")
     parser = etree.XMLParser(
@@ -182,11 +250,14 @@ def _parse_invoice(
     allowed_invoice_fields = {
         "KodWaluty",
         "P_1",
+        "P_6",
         "P_2",
         *(field for rate in _VAT_RATES.values() for field in rate[1:] if field),
         "P_15",
         "FaWiersz",
         "RodzajFaktury",
+        "Adnotacje",
+        "DodatkowyOpis",
     }
     _children(invoice, allowed_invoice_fields)
     if _text(invoice, "RodzajFaktury") != "VAT":
@@ -223,15 +294,12 @@ def _parse_invoice(
             "Faktura musi zawierać co najmniej jedną pozycję."
         )
 
-    issue_date = _text(invoice, "P_1")
-    try:
-        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", issue_date):
-            raise ValueError
-        date.fromisoformat(issue_date)
-    except ValueError as exc:
-        raise UnsupportedDocumentError(
-            "Pole P_1 nie zawiera prawidłowej daty FA(3)."
-        ) from exc
+    issue_date = _fa3_date(invoice, "P_1")
+    delivery_date = (
+        _fa3_date(invoice, "P_6") if invoice.findall(_qualified(invoice, "P_6")) else ""
+    )
+    _validate_annotations(invoice)
+    additional_descriptions = _additional_descriptions(invoice)
     summary: list[dict[str, str | None]] = []
     for code, (label, net_field, tax_field) in _VAT_RATES.items():
         has_net = bool(invoice.findall(_qualified(invoice, net_field)))
@@ -259,6 +327,7 @@ def _parse_invoice(
     data: dict[str, object] = {
         "number": _text(invoice, "P_2"),
         "issue_date": issue_date,
+        "delivery_date": delivery_date,
         "seller": seller,
         "seller_address": seller_address,
         "buyer": buyer,
@@ -266,7 +335,7 @@ def _parse_invoice(
         "gross": _decimal(invoice, "P_15"),
         "currency": currency,
     }
-    return data, rows, summary
+    return data, rows, summary, additional_descriptions
 
 
 def _e(value: str) -> str:
@@ -275,7 +344,7 @@ def _e(value: str) -> str:
 
 def render_fa3_html(xml_bytes: bytes) -> str:
     """Render an explicitly supported FA(3) XML invoice profile as HTML."""
-    data, rows, summary = _parse_invoice(xml_bytes)
+    data, rows, summary, additional_descriptions = _parse_invoice(xml_bytes)
     line_html = "\n".join(
         "<tr>"
         f"<td>{_e(row['number'])}</td>"
@@ -304,6 +373,16 @@ def render_fa3_html(xml_bytes: bytes) -> str:
     )
     seller_address = "<br>".join(_e(value) for value in data["seller_address"])
     buyer_address = "<br>".join(_e(value) for value in data["buyer_address"])
+    descriptions_html = "\n".join(
+        f"<dt>{_e(item['key'])}</dt><dd>{_e(item['value'])}</dd>"
+        for item in additional_descriptions
+    )
+    delivery_date_html = (
+        f"<br><strong>Data dostawy lub wykonania usługi:</strong> "
+        f"{_e(data['delivery_date'])}"
+        if data["delivery_date"]
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="pl">
 <head>
@@ -325,12 +404,13 @@ th {{ background: #eef2f5; }}
 </style>
 </head>
 <body>
-<header><h1>Faktura</h1><p><strong>Numer:</strong> {_e(data["number"])}<br><strong>Data wystawienia:</strong> {_e(data["issue_date"])}</p></header>
+<header><h1>Faktura</h1><p><strong>Numer:</strong> {_e(data["number"])}<br><strong>Data wystawienia:</strong> {_e(data["issue_date"])}{delivery_date_html}</p></header>
 <div class="parties">
 <section><h2>Sprzedawca</h2><p>{_e(data["seller"])}<br>{seller_address}</p></section>
 <section><h2>Nabywca</h2><p>{_e(data["buyer"])}<br>{buyer_address}</p></section>
 </div>
 <section><h2>Pozycje faktury</h2><table><thead><tr><th>Nr wiersza</th><th>Opis</th><th>Ilość i jednostka</th><th>Cena netto</th><th>VAT</th><th>Wartość netto</th></tr></thead><tbody>{line_html}</tbody></table></section>
+{"<section><h2>Dodatkowe informacje</h2><dl>" + descriptions_html + "</dl></section>" if descriptions_html else ""}
 <section class="summary" aria-label="Podsumowanie faktury"><h2>Podsumowanie</h2>{summary_html}<div><span>Kwota należności ogółem</span><strong>{_e(data["gross"])} {_e(data["currency"])}</strong></div></section>
 </body>
 </html>

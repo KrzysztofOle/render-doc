@@ -44,11 +44,17 @@ def invoice_xml() -> bytes:
     <JST>2</JST><GV>2</GV>
   </Podmiot2>
   <Fa>
-    <KodWaluty>PLN</KodWaluty><P_1>2026-10-14</P_1><P_2>FV/1/2026</P_2>
+    <KodWaluty>PLN</KodWaluty><P_1>2026-10-14</P_1><P_6>2026-10-14</P_6><P_2>FV/1/2026</P_2>
     <P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1><P_15>123.00</P_15>
     <FaWiersz><NrWierszaFa>1</NrWierszaFa><P_7>Usługa &lt;hosting&gt;</P_7>
       <P_8A>szt.</P_8A><P_8B>1</P_8B><P_9A>100.00</P_9A><P_11>100.00</P_11><P_12>23</P_12>
     </FaWiersz>
+    <Adnotacje><P_16>2</P_16><P_17>2</P_17><P_18>2</P_18><P_18A>2</P_18A>
+      <Zwolnienie><P_19N>1</P_19N></Zwolnienie>
+      <NoweSrodkiTransportu><P_22N>1</P_22N></NoweSrodkiTransportu>
+      <P_23>2</P_23><PMarzy><P_PMarzyN>1</P_PMarzyN></PMarzy>
+    </Adnotacje>
+    <DodatkowyOpis><Klucz>Warunki</Klucz><Wartosc>Standardowe</Wartosc></DodatkowyOpis>
     <RodzajFaktury>VAT</RodzajFaktury>
   </Fa>
 </Faktura>""".encode("utf-8")
@@ -59,6 +65,10 @@ def test_renders_supported_invoice_fields(invoice_xml: bytes) -> None:
     assert '<html lang="pl">' in html
     assert "FV/1/2026" in html
     assert "2026-10-14" in html
+    assert (
+        "Data wystawienia:</strong> 2026-10-14<br><strong>Data dostawy lub wykonania usługi:</strong> 2026-10-14"
+        in html
+    )
     assert "Sprzedawca &amp; Syn" in html
     assert "Nabywca" in html
     assert "Usługa &lt;hosting&gt;" in html
@@ -68,6 +78,90 @@ def test_renders_supported_invoice_fields(invoice_xml: bytes) -> None:
     assert "<th>Nr wiersza</th>" in html
     assert "<td>1</td>" in html
     assert "Kwota należności ogółem</span><strong>123.00 PLN" in html
+    assert "Dodatkowe informacje" in html
+    assert "<dt>Warunki</dt><dd>Standardowe</dd>" in html
+
+
+def test_p6_is_rendered_even_when_equal_to_issue_date(invoice_xml: bytes) -> None:
+    html = render_fa3_html(invoice_xml)
+    assert "Data dostawy lub wykonania usługi:</strong> 2026-10-14" in html
+
+
+@pytest.mark.parametrize("value", ["2026-02-30", "14.10.2026", "2026-1-01", ""])
+def test_invalid_p6_date_is_rejected(invoice_xml: bytes, value: str) -> None:
+    altered = invoice_xml.replace(
+        b"<P_6>2026-10-14</P_6>", f"<P_6>{value}</P_6>".encode()
+    )
+    with pytest.raises(UnsupportedDocumentError, match="P_6.*(prawidłowej daty|puste)"):
+        render_fa3_html(altered)
+
+
+@pytest.mark.parametrize("element", [b"<P_6A>2026-10-14</P_6A>", b"<OkresFa/>"])
+def test_unsupported_delivery_date_variants_are_rejected(
+    invoice_xml: bytes, element: bytes
+) -> None:
+    altered = invoice_xml.replace(
+        b"<RodzajFaktury>VAT</RodzajFaktury>",
+        element + b"<RodzajFaktury>VAT</RodzajFaktury>",
+    )
+    with pytest.raises(UnsupportedDocumentError, match="P_6A|OkresFa"):
+        render_fa3_html(altered)
+
+
+@pytest.mark.parametrize(
+    ("source", "replacement", "message"),
+    [
+        (b"<P_16>2</P_16>", b"<P_16>1</P_16>", "P_16"),
+        (b"<P_19N>1</P_19N>", b"<P_19>1</P_19>", "P_19"),
+        (b"<P_23>2</P_23>", b"<P_23>3</P_23>", "P_23"),
+        (b"<P_23>2</P_23>", b"<Nieznane>2</Nieznane><P_23>2</P_23>", "Nieznane"),
+    ],
+)
+def test_annotations_reject_active_unknown_or_invalid_values(
+    invoice_xml: bytes, source: bytes, replacement: bytes, message: str
+) -> None:
+    with pytest.raises(UnsupportedDocumentError, match=message):
+        render_fa3_html(invoice_xml.replace(source, replacement))
+
+
+def test_additional_description_html_is_escaped(invoice_xml: bytes) -> None:
+    altered = invoice_xml.replace(
+        b"<Klucz>Warunki</Klucz><Wartosc>Standardowe</Wartosc>",
+        b'<Klucz>&lt;script&gt;</Klucz><Wartosc>&lt;img src=x onerror=alert(1)&gt; &amp; "x"</Wartosc>',
+    )
+    html = render_fa3_html(altered)
+    assert (
+        "<dt>&lt;script&gt;</dt><dd>&lt;img src=x onerror=alert(1)&gt; &amp; &quot;x&quot;</dd>"
+        in html
+    )
+    assert "<script>" not in html
+
+
+def test_additional_descriptions_preserve_source_order(invoice_xml: bytes) -> None:
+    second = (
+        b"<DodatkowyOpis><Klucz>Drugi</Klucz><Wartosc>Wartosc</Wartosc></DodatkowyOpis>"
+    )
+    altered = invoice_xml.replace(
+        b"<RodzajFaktury>VAT</RodzajFaktury>",
+        second + b"<RodzajFaktury>VAT</RodzajFaktury>",
+    )
+    html = render_fa3_html(altered)
+    assert html.index("<dt>Warunki</dt>") < html.index("<dt>Drugi</dt>")
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [b"<NrWiersza>1</NrWiersza>", b"<Nieznane>x</Nieznane>", b"<Klucz>x</Klucz>"],
+)
+def test_unsupported_additional_description_shapes_are_rejected(
+    invoice_xml: bytes, extra: bytes
+) -> None:
+    altered = invoice_xml.replace(
+        b"<Klucz>Warunki</Klucz><Wartosc>Standardowe</Wartosc>",
+        b"<Klucz>Warunki</Klucz><Wartosc>Standardowe</Wartosc>" + extra,
+    )
+    with pytest.raises(UnsupportedDocumentError):
+        render_fa3_html(altered)
 
 
 def test_buyer_jst_and_gv_two_are_supported(invoice_xml: bytes) -> None:
@@ -77,8 +171,14 @@ def test_buyer_jst_and_gv_two_are_supported(invoice_xml: bytes) -> None:
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("JST", "1"), ("GV", "1"), ("JST", "3"), ("GV", "0"),
-     ("JST", "invalid"), ("GV", "invalid")],
+    [
+        ("JST", "1"),
+        ("GV", "1"),
+        ("JST", "3"),
+        ("GV", "0"),
+        ("JST", "invalid"),
+        ("GV", "invalid"),
+    ],
 )
 def test_unsupported_buyer_jst_or_gv_value_is_rejected(
     invoice_xml: bytes, field: str, value: str
@@ -100,9 +200,7 @@ def test_required_buyer_jst_or_gv_is_rejected_when_missing(
 
 
 def test_podmiot3_is_rejected(invoice_xml: bytes) -> None:
-    altered = invoice_xml.replace(
-        b"  <Fa>", b"  <Podmiot3/><Fa>"
-    )
+    altered = invoice_xml.replace(b"  <Fa>", b"  <Podmiot3/><Fa>")
     with pytest.raises(UnsupportedDocumentError, match="Podmiot3"):
         render_fa3_html(altered)
 
