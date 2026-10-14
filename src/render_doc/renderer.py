@@ -181,6 +181,7 @@ def _parse_invoice(xml_bytes: bytes) -> tuple[dict[str, object], list[dict[str, 
             raise UnsupportedDocumentError("Obsługiwana jest wyłącznie stawka VAT 23%.")
         rows.append(
             {
+                "number": _text(row, "NrWierszaFa"),
                 "description": _text(row, "P_7"),
                 "unit": _text(row, "P_8A", required=False),
                 "quantity": _decimal(row, "P_8B"),
@@ -227,8 +228,9 @@ def render_fa3_html(xml_bytes: bytes) -> str:
     data, rows = _parse_invoice(xml_bytes)
     line_html = "\n".join(
         "<tr>"
+        f"<td>{_e(row['number'])}</td>"
         f"<td>{_e(row['description'])}</td>"
-        f"<td>{_e(row['quantity'])} {_e(row['unit'])}</td>"
+        f"<td>{_e(row['quantity'])} {_e(row['unit']) if row['unit'] else '—'}</td>"
         f"<td>{_e(row['unit_net'])} {_e(data['currency'])}</td>"
         f"<td>{_e(row['tax_rate'])}</td>"
         f"<td>{_e(row['net'])} {_e(data['currency'])}</td>"
@@ -263,8 +265,8 @@ th {{ background: #eef2f5; }}
 <section><h2>Sprzedawca</h2><p>{_e(data["seller"])}<br>{seller_address}</p></section>
 <section><h2>Nabywca</h2><p>{_e(data["buyer"])}<br>{buyer_address}</p></section>
 </div>
-<section><h2>Pozycje faktury</h2><table><thead><tr><th>Opis</th><th>Ilość i jednostka</th><th>Cena netto</th><th>VAT</th><th>Wartość netto</th></tr></thead><tbody>{line_html}</tbody></table></section>
-<section class="summary" aria-label="Podsumowanie faktury"><h2>Podsumowanie</h2><div><span>Netto</span><strong>{_e(data["net"])} {_e(data["currency"])}</strong></div><div><span>VAT</span><strong>{_e(data["vat"])} {_e(data["currency"])}</strong></div><div><span>Należność ogółem (brutto)</span><strong>{_e(data["gross"])} {_e(data["currency"])}</strong></div></section>
+<section><h2>Pozycje faktury</h2><table><thead><tr><th>Nr wiersza</th><th>Opis</th><th>Ilość i jednostka</th><th>Cena netto</th><th>VAT</th><th>Wartość netto</th></tr></thead><tbody>{line_html}</tbody></table></section>
+<section class="summary" aria-label="Podsumowanie faktury"><h2>Podsumowanie</h2><div><span>Netto</span><strong>{_e(data["net"])} {_e(data["currency"])}</strong></div><div><span>VAT</span><strong>{_e(data["vat"])} {_e(data["currency"])}</strong></div><div><span>Kwota należności ogółem</span><strong>{_e(data["gross"])} {_e(data["currency"])}</strong></div></section>
 </body>
 </html>
 """

@@ -64,6 +64,33 @@ def test_renders_supported_invoice_fields(invoice_xml: bytes) -> None:
     assert "100.00 PLN" in html
     assert "23%" in html
     assert "123.00 PLN" in html
+    assert "<th>Nr wiersza</th>" in html
+    assert "<td>1</td>" in html
+    assert "Kwota należności ogółem</span><strong>123.00 PLN" in html
+
+
+def test_preserves_source_line_number_and_escapes_it(invoice_xml: bytes) -> None:
+    altered = invoice_xml.replace(
+        b"<NrWierszaFa>1</NrWierszaFa>",
+        b"<NrWierszaFa>7&lt;8</NrWierszaFa>",
+    )
+    html = render_fa3_html(altered)
+    assert "<td>7&lt;8</td>" in html
+    assert "<td>1</td>" not in html
+
+
+def test_optional_unit_is_rendered_or_shown_as_dash(invoice_xml: bytes) -> None:
+    with_unit = render_fa3_html(invoice_xml)
+    assert "<td>1 szt.</td>" in with_unit
+
+    without_unit = render_fa3_html(invoice_xml.replace(b"<P_8A>szt.</P_8A>", b""))
+    assert "<td>1 —</td>" in without_unit
+    assert "<td>1 </td>" not in without_unit
+
+
+def test_total_label_does_not_change_p15_value(invoice_xml: bytes) -> None:
+    html = render_fa3_html(invoice_xml)
+    assert "Kwota należności ogółem</span><strong>123.00 PLN" in html
 
 
 def test_invalid_xml_has_readable_exception() -> None:
