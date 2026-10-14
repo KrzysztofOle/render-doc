@@ -12,6 +12,9 @@ i 0%. Warianty 0% są rozróżniane jako `0 KR` (sprzedaż krajowa), `0 WDT`
 (wewnątrzwspólnotowa dostawa towarów) i `0 EX` (eksport); inne oznaczenia, w
 tym `zw`, są odrzucane. Wyświetla numer
 `P_2`, datę wystawienia `P_1`, nazwę i NIP stron z `Podmiot1` i `Podmiot2`,
+przy czym w `Podmiot2` wymagane są `JST=2` i `GV=2` (faktura nie dotyczy
+jednostki podrzędnej JST ani członka grupy VAT); `1` i inne wartości są
+odrzucane, podobnie jak każdy element `Podmiot3`,
 opcjonalne pojedyncze linie adresu, opis pozycji `P_7`, ilość `P_8B`, jednostkę
 `P_8A`, cenę jednostkową netto `P_9A`, wartość netto pozycji `P_11`, źródłowy
 numer `NrWierszaFa` i stawkę `P_12`. Podsumowanie pokazuje netto i VAT z pól

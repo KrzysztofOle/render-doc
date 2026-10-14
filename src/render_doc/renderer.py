@@ -98,9 +98,20 @@ _VAT_RATES = {
 }
 
 
-def _party(root: etree._Element, name: str) -> tuple[str, list[str]]:
+def _party(
+    root: etree._Element, name: str, *, buyer: bool = False
+) -> tuple[str, list[str]]:
     party = _one(root, name)
-    _children(party, {"DaneIdentyfikacyjne", "Adres"})
+    allowed_fields = {"DaneIdentyfikacyjne", "Adres"}
+    if buyer:
+        allowed_fields.update({"JST", "GV"})
+    _children(party, allowed_fields)
+    if buyer:
+        for field in ("JST", "GV"):
+            if _text(party, field) != "2":
+                raise UnsupportedDocumentError(
+                    f"Obsługiwana jest wyłącznie wartość 2 w polu {field}."
+                )
     identity = _one(party, "DaneIdentyfikacyjne")
     _children(identity, {"NIP", "Nazwa"})
     display_name = f"{_text(identity, 'Nazwa')} (NIP: {_text(identity, 'NIP')})"
@@ -166,7 +177,7 @@ def _parse_invoice(
     _text(header, "DataWytworzeniaFa")
 
     seller, seller_address = _party(root, "Podmiot1")
-    buyer, buyer_address = _party(root, "Podmiot2")
+    buyer, buyer_address = _party(root, "Podmiot2", buyer=True)
     invoice = _one(root, "Fa")
     allowed_invoice_fields = {
         "KodWaluty",

@@ -41,6 +41,7 @@ def invoice_xml() -> bytes:
   <Podmiot2>
     <DaneIdentyfikacyjne><NIP>2222222222</NIP><Nazwa>Nabywca</Nazwa></DaneIdentyfikacyjne>
     <Adres><KodKraju>PL</KodKraju><AdresL1>Testowa 2, 00-002 Łódź</AdresL1></Adres>
+    <JST>2</JST><GV>2</GV>
   </Podmiot2>
   <Fa>
     <KodWaluty>PLN</KodWaluty><P_1>2026-10-14</P_1><P_2>FV/1/2026</P_2>
@@ -67,6 +68,43 @@ def test_renders_supported_invoice_fields(invoice_xml: bytes) -> None:
     assert "<th>Nr wiersza</th>" in html
     assert "<td>1</td>" in html
     assert "Kwota należności ogółem</span><strong>123.00 PLN" in html
+
+
+def test_buyer_jst_and_gv_two_are_supported(invoice_xml: bytes) -> None:
+    html = render_fa3_html(invoice_xml)
+    assert "Nabywca" in html
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("JST", "1"), ("GV", "1"), ("JST", "3"), ("GV", "0"),
+     ("JST", "invalid"), ("GV", "invalid")],
+)
+def test_unsupported_buyer_jst_or_gv_value_is_rejected(
+    invoice_xml: bytes, field: str, value: str
+) -> None:
+    altered = invoice_xml.replace(
+        f"<{field}>2</{field}>".encode(), f"<{field}>{value}</{field}>".encode()
+    )
+    with pytest.raises(UnsupportedDocumentError, match=f"wartość 2.*{field}"):
+        render_fa3_html(altered)
+
+
+@pytest.mark.parametrize("field", ["JST", "GV"])
+def test_required_buyer_jst_or_gv_is_rejected_when_missing(
+    invoice_xml: bytes, field: str
+) -> None:
+    altered = invoice_xml.replace(f"<{field}>2</{field}>".encode(), b"")
+    with pytest.raises(UnsupportedDocumentError, match=f"Brak wymaganego pola {field}"):
+        render_fa3_html(altered)
+
+
+def test_podmiot3_is_rejected(invoice_xml: bytes) -> None:
+    altered = invoice_xml.replace(
+        b"  <Fa>", b"  <Podmiot3/><Fa>"
+    )
+    with pytest.raises(UnsupportedDocumentError, match="Podmiot3"):
+        render_fa3_html(altered)
 
 
 def test_preserves_source_line_number_and_escapes_it(invoice_xml: bytes) -> None:

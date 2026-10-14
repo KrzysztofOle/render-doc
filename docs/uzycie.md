@@ -33,7 +33,10 @@ lub nieobsługiwany dokument.
 Obsługiwany jest wariant FA(3) `1-0E`, podstawowa faktura `VAT`, PLN oraz
 wiele pozycji ze stawkami `23`, `8`, `5`, `0 KR`, `0 WDT` i `0 EX`. Warianty
 0% są prezentowane oddzielnie (krajowy, WDT, eksport); `zw` i pozostałe kody
-są odrzucane. Renderer pokazuje `P_2`, `P_1`, dane `Podmiot1`/`Podmiot2` oraz
+są odrzucane. W `Podmiot2` wymagane są pola `JST=2` i `GV=2`; oznaczają one,
+że faktura nie dotyczy jednostki podrzędnej JST ani członka grupy VAT. Wartość
+`1` oraz inne wartości są odrzucane. `Podmiot3` pozostaje nieobsługiwany.
+Renderer pokazuje `P_2`, `P_1`, dane `Podmiot1`/`Podmiot2` oraz
 pola wiersza `NrWierszaFa`, `P_7`, `P_8A`, `P_8B`, `P_9A`, `P_11`, `P_12`.
 
 Podsumowanie wartości netto i VAT pochodzi z `P_13_1`/`P_14_1` (23%),
