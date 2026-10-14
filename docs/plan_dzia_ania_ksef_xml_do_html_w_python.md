@@ -1,171 +1,54 @@
-# Plan Działania: Aplikacja Python do konwersji faktur KSeF (XML) na podgląd HTML
+# Plan implementacji render-doc
 
-Dokument zawiera kompletny plan architektoniczny i instrukcję wdrożenia aplikacji skryptowej/webowej w języku Python, służącej do przekształcania ustrukturyzowanych faktur KSeF (format XML) do czytelnej postaci HTML z wykorzystaniem oficjalnych szablonów XSLT.
+> **Status:** plan. To repozytorium nie zawiera jeszcze pakietu Python ani
+> działającego renderera. Wcześniejsze przykłady kodu były szkicami i nie
+> stanowią implementacji, bezpiecznego parsera ani publicznego API.
 
----
+Docelowy podział odpowiedzialności zatwierdza
+[decyzja architektoniczna](architektura_render_doc_i_aplikacji_gui.md).
+Ten plan opisuje kolejne możliwe etapy; nie deklaruje ich dostępności.
 
-## 1. Cel i założenia projektu
+## Fakty dotyczące źródeł FA(3)
 
-- **Główny cel:** Automatyczna konwersja plików faktur KSeF w formacie XML (dla schematów `FA(1)` oraz `FA(2)`) do czytelnych plików HTML.
-- **Funkcja podglądu:** Automatyczne otwieranie wygenerowanego pliku HTML w domyślnej przeglądarce internetowej użytkownika.
-- **Detekcja wersji:** Automatyczne rozpoznawanie struktury logicznej faktury (FA_1 vs FA_2) na podstawie przestrzeni nazw (namespace) w pliku XML i dobór odpowiedniego arkusza stylów XSLT.
+Ministerstwo Finansów publikuje strukturę logiczną FA(3), dokumentację,
+broszurę i przykładowe pliki. Nie potwierdzono, aby publikowało oficjalny
+arkusz XSLT do tworzenia wizualizacji. Oficjalne repozytorium
+[ksef-pdf-generator](https://github.com/CIRFMF/ksef-pdf-generator) generuje
+PDF; kod generatora FA(3) tworzy definicję dla `pdfmake` i nie potwierdza
+publicznego wyjścia HTML. Nie używać określenia „oficjalny szablon XSLT” bez
+konkretnego źródła, licencji i dowodu pochodzenia.
 
----
+Źródła: [MF — struktura FA(3)](https://ksef.podatki.gov.pl/informacje-ogolne-ksef-20/struktura-logiczna-fa-3/),
+[generator PDF MF — README](https://github.com/CIRFMF/ksef-pdf-generator),
+[jego kod FA(3)](https://github.com/CIRFMF/ksef-pdf-generator/blob/main/src/lib-public/FA3-generator.ts).
 
-## 2. Wymagania wstępne i biblioteki
+## Etapy
 
-Do realizacji projektu zalecane jest środowisko **Python 3.9+**.
+1. **FA(3) XML → HTML:** utworzyć samodzielny pakiet Python i minimalne,
+   wersjonowane publiczne API. Ograniczyć pierwszy zakres do jawnie
+   wspieranej części FA(3), bezpiecznie przetwarzać XML i generować kompletny
+   HTML z lokalnymi zasobami. Nie zakładać XSLT jako techniki ani źródła
+   szablonu.
+2. **Walidacja publicznego kontraktu:** testy offline na syntetycznych lub
+   zanonimizowanych fixture’ach, pokrycie istotnych pól i wariantów,
+   sprawdzenie escapowania, odrzuceń, braku dostępu do sieci oraz
+   samowystarczalności HTML. Udokumentować ograniczenia obsługi.
+3. **FA(3) HTML → PDF:** dodać osobny etap i silnik PDF dopiero po ocenie
+   licencji, zależności natywnych, macOS/Windows, trybu offline, paginacji
+   i bezpieczeństwa zasobów. API PDF ma korzystać z odpowiedzialności
+   render-doc, bez wiązania go z GUI albo konkretnym konsumentem.
+4. **Rozszerzenia:** dodawać pozostałe struktury KSeF jako osobne zakresy
+   po uzgodnieniu wymagań i testów. Nie deklarować „wszystkich dokumentów
+   KSeF” z góry.
 
-### Wymagane pakiety Python:
-- **`lxml`**: Szybka i wydajna biblioteka do obsługi XML oraz przetwarzania transformat XSLT 1.0.
-- **`webbrowser`**: Standardowa biblioteka Pythona do automatycznego uruchamiania przeglądarki.
-- **`pathlib` / `os`**: Do zarządzania ścieżkami plików na dysku.
+## Minimalny etap offline na macOS
 
-### Instalacja zależności:
-```bash
-pip install lxml
-```
+Pierwszym zadaniem implementacyjnym powinien być wyłącznie etap 1: minimalny
+pakiet i testy publicznego FA(3) → HTML. Weryfikacja nie potrzebuje dostępu
+do KSeF ani Optimy. Do czasu wydania i sprawdzenia pakietu konsumenci
+pozostają przy istniejących rozwiązaniach. Zgodność HTML z
+`CDN.DokumentyKSeF.DKF_Html` wymaga osobnego testu w Optimie i nie wynika
+z testów offline.
 
----
-
-## 3. Pozyskanie szablonów XSLT
-
-Do prawidłowego wyrenderowania faktury KSeF niezbędne są oficjalne arkusze stylów XSLT opublikowane przez Ministerstwo Finansów.
-
-1. Pobierz pliki stylów `.xslt` z oficjalnego repozytorium MF na GitHubie (np. `ksef-docs` lub `ksef-pdf-generator`) bądź z portalu ePUAP (CRWDE).
-2. Zapisz je w strukturze projektu w katalogu `schematy/`:
-   - `schematy/FA_1.xslt` (dla schematu Wzór FA(1))
-   - `schematy/FA_2.xslt` (dla schematu Wzór FA(2))
-
----
-
-## 4. Architektura i plan wdrożenia krok po kroku
-
-### Krok 1: Struktura katalogów projektu
-Utwórz następujący układ plików:
-```text
-ksef_converter/
-│
-├── schematy/
-│   ├── FA_1.xslt
-│   └── FA_2.xslt
-│
-├── input/             # Folder na pliki XML do przetworzenia
-├── output/            # Folder na wygenerowane pliki HTML
-├── main.py            # Główny skrypt aplikacji
-└── requirements.txt   # Zależności projektu
-```
-
----
-
-### Krok 2: Detekcja schematu XML
-Faktura KSeF posiada główny element z określoną przestrzenią nazw (`xmlns`). Aplikacja musi odczytać nagłówek XML i wykryć wersję faktury:
-- `http://crd.gov.pl/wzor/2021/11/29/11089/` $\rightarrow$ **FA(1)**
-- `http://crd.gov.pl/wzor/2023/06/29/12648/` $\rightarrow$ **FA(2)**
-
----
-
-### Krok 3: Silnik transformacji XSLT (`lxml`)
-Moduł odpowiedzialny za wczytanie pliku XML oraz właściwego pliku XSLT, wykonanie operacji `XSLT()` i wygenerowanie kodu HTML.
-
----
-
-### Krok 4: Podgląd w przeglądarce
-Wykorzystanie modułu `webbrowser.open()` do uruchomienia pliku wyjściowego HTML w domyślnej przeglądarce systemowej.
-
----
-
-## 5. Przykładowa implementacja kodu (`main.py`)
-
-```python
-import os
-import sys
-import webbrowser
-from pathlib import Path
-from lxml import etree
-
-# Mapowanie przestrzeni nazw XML na pliki XSLT
-XSLT_MAPPING = {
-    "http://crd.gov.pl/wzor/2021/11/29/11089/": "schematy/FA_1.xslt",
-    "http://crd.gov.pl/wzor/2023/06/29/12648/": "schematy/FA_2.xslt"
-}
-
-def wykryj_xslt(xml_tree: etree._ElementTree) -> Path:
-    """Wykrywa właściwy plik XSLT na podstawie namespace w pliku XML."""
-    root = xml_tree.getroot()
-    # Pobranie głównej przestrzeni nazw
-    namespace = root.nsmap.get(None)
-    
-    if namespace in XSLT_MAPPING:
-        xslt_path = Path(XSLT_MAPPING[namespace])
-        if xslt_path.exists():
-            return xslt_path
-        else:
-            raise FileNotFoundError(f"Brak pliku XSLT: {xslt_path}")
-    else:
-        raise ValueError(f"Nieobsługiwana przestrzeń nazw XML: {namespace}")
-
-def konwertuj_xml_do_html(xml_path: Path, output_dir: Path) -> Path:
-    """Konwertuje plik XML faktury KSeF do formatu HTML."""
-    if not xml_path.exists():
-        raise FileNotFoundError(f"Plik XML nie istnieje: {xml_path}")
-
-    # 1. Wczytanie pliku XML
-    parser = etree.XMLParser(remove_blank_text=True)
-    xml_tree = etree.parse(str(xml_path), parser)
-
-    # 2. Wykrycie odpowiedniego arkusza XSLT
-    xslt_path = wykryj_xslt(xml_tree)
-    xslt_tree = etree.parse(str(xslt_path))
-
-    # 3. Wykonanie transformacji
-    transform = etree.XSLT(xslt_tree)
-    html_tree = transform(xml_tree)
-
-    # 4. Zapis do pliku HTML
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_html_path = output_dir / f"{xml_path.stem}.html"
-    
-    with open(output_html_path, "wb") as f:
-        f.write(etree.tostring(html_tree, pretty_print=True, method="html", encoding="utf-8"))
-
-    return output_html_path
-
-def otworz_w_przegladarce(html_path: Path):
-    """Otwiera plik HTML w domyślnej przeglądarce."""
-    absolute_url = html_path.resolve().as_uri()
-    print(f"Otwieranie w przeglądarce: {absolute_url}")
-    webbrowser.open(absolute_url)
-
-def main():
-    if len(sys.argv) < 2:
-        print("Użycie: python main.py <sciezka_do_pliku_xml>")
-        return
-
-    xml_file = Path(sys.argv[1])
-    output_folder = Path("output")
-
-    try:
-        print(f"Przetwarzanie pliku: {xml_file.name}...")
-        html_file = konwertuj_xml_do_html(xml_file, output_folder)
-        print(f"Wygenerowano plik HTML: {html_file}")
-        otworz_w_przegladarce(html_file)
-    except Exception as e:
-        print(f"Błąd podczas konwersji: {e}")
-
-if __name__ == "__main__":
-    main()
-```
-
----
-
-## 6. Rozbudowa i dalsze możliwości (Roadmap)
-
-1. **Interfejs graficzny (GUI):**
-   - Dodanie prostego okna w **Tkinter** lub **PyQt** z przyciskiem „Wybierz plik XML” i automatycznym podglądem.
-2. **Eksport do PDF:**
-   - Integracja z biblioteką `weasyprint` lub `pdfkit` (wkhtmltopdf), aby wygenerowany HTML zamienić od razu na gotowy dokument PDF gotowy do druku.
-3. **Generowanie kodów QR:**
-   - Dodanie modułu w Pythonie (`qrcode`), który wygeneruje kod QR dla faktury KSeF (zgodnie z wymogami MF) i wstrzyknie go do wynikowego dokumentu HTML/PDF.
-4. **Tryb masowy (Batch processing):**
-   - Obsługa całych katalogów z plikami XML – zbiorcza konwersja do HTML dla całej paczki pobranej z KSeF.
+PDF, GUI, klient KSeF, connector, import kodu z innych repozytoriów oraz
+zmiany publicznych API KSeF_2 nie należą do tego etapu.
