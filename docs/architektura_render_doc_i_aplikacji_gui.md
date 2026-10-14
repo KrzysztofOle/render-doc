@@ -46,9 +46,13 @@ XML do rendererów jako klient, po ich wydaniu i osobnym wdrożeniu.
 
 ## Stan obecny i migracja
 
-Repozytorium render-doc zawiera obecnie dokumentację, a nie pakiet ani gotowy
-renderer. Przykładowe fragmenty kodu z wcześniejszych dokumentów nie są
-implementacją ani zatwierdzonym kontraktem API.
+Repozytorium zawiera pakiet Python `render-doc` 0.1.0 z publicznym API
+`render_fa3_html(xml_bytes: bytes) -> str` oraz CLI `render-doc`. Pierwsza
+implementacja renderuje do samowystarczalnego HTML ograniczony profil
+podstawowej faktury FA(3): PLN, stawka 23%, pojedyncze nazwy/NIP stron i
+podstawowe pozycje oraz sumy. To nie jest pełna walidacja XSD ani pełna obsługa
+FA(3); zakres i odrzucane warianty opisuje README. Nie potwierdzono zgodności
+HTML z Optimą.
 
 KSeF_2 zachowuje obecny renderer `ksef_invoice_renderer`, jego zachowanie
 i publiczne API w okresie przejściowym. Connector zachowuje istniejący
@@ -62,31 +66,32 @@ render-doc z Optimą nie zostanie potwierdzona w dopuszczonym badaniu.
 
 ## Założenia nienormatywne i otwarte decyzje
 
-- Nie zakłada się dostępności oficjalnego XSLT MF do wizualizacji. MF
-  publikuje strukturę FA(3), dokumentację i przykładowe pliki; wskazany
-  oficjalny generator PDF buduje dokument przez `pdfmake`, co samo w sobie
+- Oficjalna strona wzoru FA(3) w CRWDE udostępnia odnośnik do pliku
+  `styl.xsl`. Samo istnienie pliku nie potwierdza jego zakresu, licencji,
+  bezpieczeństwa ani tego, że jest właściwym kontraktem HTML dla różnych
+  aplikacji; nie jest używany w pierwszym etapie bez osobnego sprawdzenia.
+  Wskazany generator PDF MF buduje dokument przez `pdfmake`, co samo w sobie
   nie udostępnia HTML. Zob. [strona MF o FA(3)](https://ksef.podatki.gov.pl/informacje-ogolne-ksef-20/struktura-logiczna-fa-3/),
+  [wzór FA(3) w CRWDE](https://crd.gov.pl/wzor/2025/06/25/13775/),
   [repozytorium generatora PDF MF](https://github.com/CIRFMF/ksef-pdf-generator)
   i [kod generatora FA3](https://github.com/CIRFMF/ksef-pdf-generator/blob/main/src/lib-public/FA3-generator.ts).
-- Wybór parsera, formatu publicznego API, szablonu HTML i silnika PDF pozostaje
-  do rozstrzygnięcia przy implementacji. Wybór bibliotek lub szablonów wymaga
-  osobnej weryfikacji ich licencji, pochodzenia i przenośności.
+- Pierwszy etap używa `lxml`, publicznego API `render_fa3_html` i osadzonego
+  CSS. Integracja z `styl.xsl` nie została zatwierdzona. Wybór silnika PDF
+  i ewentualna zmiana zakresu API wymagają osobnego etapu oraz sprawdzenia
+  licencji, pochodzenia, przenośności i bezpieczeństwa.
 - Zakres wariantów FA(3), lokalizacje, branding i dalsze formaty będą
   rozszerzane na podstawie osobnych wymagań; nie są uznane za obsługiwane.
-- API, pakietowanie i polityka wersji wymagają konkretnej specyfikacji przed
-  pierwszym wydaniem. Ta decyzja zatwierdza właściciela i kierunek, nie
-  szczegóły API.
+- Wersja 0.1.0 jest pierwszą lokalną implementacją; polityka wydań i dalsza
+  stabilizacja API pozostają do ustalenia przed publikacją pakietu.
 
 ## Najmniejszy pierwszy etap implementacji
 
-W osobnym zadaniu utworzyć minimalny pakiet instalowalny i jedną publiczną,
-wersjonowaną operację FA(3) XML → kompletny HTML. Użyć lokalnego,
-zanonimizowanego lub syntetycznego fixture; wygenerowany dokument ma zawierać
-osadzony CSS i nie wymagać sieci. Dodać testy offline dla poprawnego wejścia,
-wartości faktury, bezpiecznego odrzucenia nieobsługiwanych danych i braku
-zewnętrznych zasobów. Etap nie obejmuje PDF, GUI, KSeF, Optimy ani migracji
-klientów. Można go wykonać na macOS bez połączeń sieciowych po przygotowaniu
-środowiska i fixture.
+Etap 1 został zaimplementowany jako lokalny pakiet instalowalny 0.1.0 z API
+FA(3) XML → kompletny HTML i CLI. Testy używają syntetycznego fixture oraz
+sprawdzają parser, renderowanie, CLI, brak zewnętrznych zasobów i brak
+połączeń sieciowych. Etap nie obejmuje PDF, GUI, KSeF, Optimy ani migracji
+klientów. Zgodność `DKF_Html` nadal wymaga osobnego potwierdzenia w Optimie.
 
-**Zakres tego dokumentu:** utrwalenie zatwierdzonego podziału odpowiedzialności;
-nie stwierdza zaimplementowania pakietu ani żadnej z planowanych capabilities.
+**Zakres tego dokumentu:** utrwalenie podziału odpowiedzialności i wskazanie
+stanu pierwszego lokalnego etapu; nie oznacza publikacji pakietu ani zgodności
+HTML z Optimą.

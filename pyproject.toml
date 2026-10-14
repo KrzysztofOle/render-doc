@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "render-doc"
+version = "0.1.0"
+description = "Offline HTML rendering for a restricted FA(3) invoice profile"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+dependencies = ["lxml>=5.0,<7"]
+
+[project.scripts]
+render-doc = "render_doc.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
