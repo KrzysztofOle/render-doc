@@ -3,10 +3,11 @@
 Features (EN):
 - Parses XML without loading DTDs, entities, or network resources.
 - Renders a restricted PLN, 23% VAT basic invoice profile.
+- Renders multiple rows with 23%, 8%, 5%, and explicit 0% variants.
 
 Funkcje (PL):
 - Parsuje XML bez wczytywania DTD, encji ani zasobów sieciowych.
-- Renderuje ograniczony profil podstawowej faktury PLN ze stawką VAT 23%.
+- Renderuje ograniczony profil faktury PLN ze stawkami 23%, 8%, 5% i wariantami 0%.
 
 File: src/render_doc/renderer.py
 """
@@ -87,6 +88,16 @@ def _decimal(parent: etree._Element, name: str) -> str:
     return value
 
 
+_VAT_RATES = {
+    "23": ("23%", "P_13_1", "P_14_1"),
+    "8": ("8%", "P_13_2", "P_14_2"),
+    "5": ("5%", "P_13_3", "P_14_3"),
+    "0 KR": ("0% (krajowa)", "P_13_6_1", None),
+    "0 WDT": ("0% (WDT)", "P_13_6_2", None),
+    "0 EX": ("0% (eksport)", "P_13_6_3", None),
+}
+
+
 def _party(root: etree._Element, name: str) -> tuple[str, list[str]]:
     party = _one(root, name)
     _children(party, {"DaneIdentyfikacyjne", "Adres"})
@@ -110,7 +121,9 @@ def _party(root: etree._Element, name: str) -> tuple[str, list[str]]:
     return display_name, address_lines
 
 
-def _parse_invoice(xml_bytes: bytes) -> tuple[dict[str, object], list[dict[str, str]]]:
+def _parse_invoice(
+    xml_bytes: bytes,
+) -> tuple[dict[str, object], list[dict[str, str]], list[dict[str, str | None]]]:
     if not isinstance(xml_bytes, bytes):
         raise TypeError("xml_bytes musi mieć typ bytes.")
     parser = etree.XMLParser(
@@ -159,8 +172,7 @@ def _parse_invoice(xml_bytes: bytes) -> tuple[dict[str, object], list[dict[str, 
         "KodWaluty",
         "P_1",
         "P_2",
-        "P_13_1",
-        "P_14_1",
+        *(field for rate in _VAT_RATES.values() for field in rate[1:] if field),
         "P_15",
         "FaWiersz",
         "RodzajFaktury",
@@ -175,10 +187,15 @@ def _parse_invoice(xml_bytes: bytes) -> tuple[dict[str, object], list[dict[str, 
         raise UnsupportedDocumentError("Obsługiwana jest wyłącznie waluta PLN.")
 
     rows: list[dict[str, str]] = []
+    observed_rates: set[str] = set()
     for row in invoice.findall(_qualified(invoice, "FaWiersz")):
         _children(row, {"NrWierszaFa", "P_7", "P_8A", "P_8B", "P_9A", "P_11", "P_12"})
-        if _text(row, "P_12") != "23":
-            raise UnsupportedDocumentError("Obsługiwana jest wyłącznie stawka VAT 23%.")
+        source_rate = _text(row, "P_12")
+        if source_rate not in _VAT_RATES:
+            raise UnsupportedDocumentError(
+                f"Nieobsługiwana stawka VAT w polu P_12: {source_rate}."
+            )
+        observed_rates.add(source_rate)
         rows.append(
             {
                 "number": _text(row, "NrWierszaFa"),
@@ -187,7 +204,7 @@ def _parse_invoice(xml_bytes: bytes) -> tuple[dict[str, object], list[dict[str, 
                 "quantity": _decimal(row, "P_8B"),
                 "unit_net": _decimal(row, "P_9A"),
                 "net": _decimal(row, "P_11"),
-                "tax_rate": "23%",
+                "tax_rate": _VAT_RATES[source_rate][0],
             }
         )
     if not rows:
@@ -204,6 +221,30 @@ def _parse_invoice(xml_bytes: bytes) -> tuple[dict[str, object], list[dict[str, 
         raise UnsupportedDocumentError(
             "Pole P_1 nie zawiera prawidłowej daty FA(3)."
         ) from exc
+    summary: list[dict[str, str | None]] = []
+    for code, (label, net_field, tax_field) in _VAT_RATES.items():
+        has_net = bool(invoice.findall(_qualified(invoice, net_field)))
+        has_tax = bool(tax_field and invoice.findall(_qualified(invoice, tax_field)))
+        if (has_net != has_tax) and tax_field:
+            raise UnsupportedDocumentError(
+                f"Niepełne podsumowanie VAT dla stawki {label}: wymagane pola "
+                f"{net_field} i {tax_field}."
+            )
+        if code in observed_rates and not has_net:
+            required = f"{net_field} i {tax_field}" if tax_field else net_field
+            raise UnsupportedDocumentError(
+                f"Brak wymaganych pól sumarycznych dla stawki {label}: {required}."
+            )
+        if has_net:
+            summary.append(
+                {
+                    "rate": label,
+                    "net": _decimal(invoice, net_field),
+                    "vat": _decimal(invoice, tax_field)
+                    if tax_field and has_tax
+                    else None,
+                }
+            )
     data: dict[str, object] = {
         "number": _text(invoice, "P_2"),
         "issue_date": issue_date,
@@ -211,12 +252,10 @@ def _parse_invoice(xml_bytes: bytes) -> tuple[dict[str, object], list[dict[str, 
         "seller_address": seller_address,
         "buyer": buyer,
         "buyer_address": buyer_address,
-        "net": _decimal(invoice, "P_13_1"),
-        "vat": _decimal(invoice, "P_14_1"),
         "gross": _decimal(invoice, "P_15"),
         "currency": currency,
     }
-    return data, rows
+    return data, rows, summary
 
 
 def _e(value: str) -> str:
@@ -225,7 +264,7 @@ def _e(value: str) -> str:
 
 def render_fa3_html(xml_bytes: bytes) -> str:
     """Render an explicitly supported FA(3) XML invoice profile as HTML."""
-    data, rows = _parse_invoice(xml_bytes)
+    data, rows, summary = _parse_invoice(xml_bytes)
     line_html = "\n".join(
         "<tr>"
         f"<td>{_e(row['number'])}</td>"
@@ -236,6 +275,21 @@ def render_fa3_html(xml_bytes: bytes) -> str:
         f"<td>{_e(row['net'])} {_e(data['currency'])}</td>"
         "</tr>"
         for row in rows
+    )
+    summary_html = "\n".join(
+        "<div>"
+        f"<span>Netto {_e(item['rate'] or '')}</span>"
+        f"<strong>{_e(item['net'] or '')} {_e(data['currency'])}</strong>"
+        "</div>"
+        + (
+            "<div>"
+            f"<span>VAT {_e(item['rate'] or '')}</span>"
+            f"<strong>{_e(item['vat'])} {_e(data['currency'])}</strong>"
+            "</div>"
+            if item["vat"] is not None
+            else ""
+        )
+        for item in summary
     )
     seller_address = "<br>".join(_e(value) for value in data["seller_address"])
     buyer_address = "<br>".join(_e(value) for value in data["buyer_address"])
@@ -266,7 +320,7 @@ th {{ background: #eef2f5; }}
 <section><h2>Nabywca</h2><p>{_e(data["buyer"])}<br>{buyer_address}</p></section>
 </div>
 <section><h2>Pozycje faktury</h2><table><thead><tr><th>Nr wiersza</th><th>Opis</th><th>Ilość i jednostka</th><th>Cena netto</th><th>VAT</th><th>Wartość netto</th></tr></thead><tbody>{line_html}</tbody></table></section>
-<section class="summary" aria-label="Podsumowanie faktury"><h2>Podsumowanie</h2><div><span>Netto</span><strong>{_e(data["net"])} {_e(data["currency"])}</strong></div><div><span>VAT</span><strong>{_e(data["vat"])} {_e(data["currency"])}</strong></div><div><span>Kwota należności ogółem</span><strong>{_e(data["gross"])} {_e(data["currency"])}</strong></div></section>
+<section class="summary" aria-label="Podsumowanie faktury"><h2>Podsumowanie</h2>{summary_html}<div><span>Kwota należności ogółem</span><strong>{_e(data["gross"])} {_e(data["currency"])}</strong></div></section>
 </body>
 </html>
 """

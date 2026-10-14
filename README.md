@@ -6,19 +6,25 @@ offline i nie wymaga KSeF_2 ani Comarch ERP Optima.
 
 ## Obsługiwany zakres
 
-Pierwszy etap obsługuje dokument z nagłówkiem FA(3), podstawową fakturę
-`RodzajFaktury=VAT`, walutę PLN i pozycje ze stawką VAT 23%. Wyświetla numer
+Obsługiwany profil obejmuje dokument z nagłówkiem FA(3), podstawową fakturę
+`RodzajFaktury=VAT`, walutę PLN oraz wiele pozycji ze stawkami VAT 23%, 8%, 5%
+i 0%. Warianty 0% są rozróżniane jako `0 KR` (sprzedaż krajowa), `0 WDT`
+(wewnątrzwspólnotowa dostawa towarów) i `0 EX` (eksport); inne oznaczenia, w
+tym `zw`, są odrzucane. Wyświetla numer
 `P_2`, datę wystawienia `P_1`, nazwę i NIP stron z `Podmiot1` i `Podmiot2`,
 opcjonalne pojedyncze linie adresu, opis pozycji `P_7`, ilość `P_8B`, jednostkę
-`P_8A`, cenę jednostkową netto `P_9A`, wartość netto pozycji `P_11`, stawkę
-`P_12` oraz podsumowanie netto `P_13_1`, VAT `P_14_1` i należność ogółem
-`P_15`, która w obsługiwanym profilu odpowiada wartości brutto.
+`P_8A`, cenę jednostkową netto `P_9A`, wartość netto pozycji `P_11`, źródłowy
+numer `NrWierszaFa` i stawkę `P_12`. Podsumowanie pokazuje netto i VAT z pól
+`P_13_1`/`P_14_1` (23%), `P_13_2`/`P_14_2` (8%) i `P_13_3`/`P_14_3` (5%).
+Dla wariantów 0% pokazuje netto z `P_13_6_1`, `P_13_6_2` i `P_13_6_3`; FA(3)
+nie definiuje dla nich osobnych sumarycznych pól VAT. Należność ogółem jest
+prezentowana z `P_15` bez przeliczania.
 
 To ograniczony profil, a nie walidator XSD ani pełna obsługa FA(3). Renderer
-odrzuca inne waluty, stawki, rodzaje faktury, dodatkowe pola i warianty, które
+odrzuca inne waluty, stawki i warianty 0%, rodzaje faktury, dodatkowe pola i warianty, które
 mogłyby zmienić znaczenie prezentacji. Nie obsługuje faktur korygujących,
-zaliczkowych, uproszczonych, marży, rabatów, wielu kategorii VAT ani innych
-struktur KSeF. Dane dodatkowe nie są obecnie prezentowane. HTML jest
+zaliczkowych, uproszczonych, marży, rabatów ani kategorii VAT poza wskazanymi
+powyżej. Inne struktury KSeF i dane dodatkowe nie są obecnie prezentowane. HTML jest
 samowystarczalny, używa osadzonego CSS, nie zawiera JavaScriptu ani zasobów
 zewnętrznych. Nie deklarujemy zgodności z generatorem MF ani z polem
 `CDN.DokumentyKSeF.DKF_Html` Optimy.

@@ -88,8 +88,10 @@ def test_optional_unit_is_rendered_or_shown_as_dash(invoice_xml: bytes) -> None:
     assert "<td>1 </td>" not in without_unit
 
 
-def test_total_label_does_not_change_p15_value(invoice_xml: bytes) -> None:
+def test_summary_uses_source_totals_and_p15(invoice_xml: bytes) -> None:
     html = render_fa3_html(invoice_xml)
+    assert "Netto 23%</span><strong>100.00 PLN" in html
+    assert "VAT 23%</span><strong>23.00 PLN" in html
     assert "Kwota należności ogółem</span><strong>123.00 PLN" in html
 
 
@@ -103,9 +105,87 @@ def test_non_fa3_structure_is_rejected() -> None:
         render_fa3_html(b"<UPO/>")
 
 
-def test_unsupported_vat_profile_is_rejected(invoice_xml: bytes) -> None:
-    altered = invoice_xml.replace(b"<P_12>23</P_12>", b"<P_12>8</P_12>")
-    with pytest.raises(UnsupportedDocumentError, match="stawka VAT 23%"):
+def test_mixed_vat_rows_and_summary_are_rendered(invoice_xml: bytes) -> None:
+    second_row = """<FaWiersz><NrWierszaFa>3</NrWierszaFa><P_7>Stawka obniżona</P_7>
+      <P_8A>szt.</P_8A><P_8B>1</P_8B><P_9A>50.00</P_9A><P_11>50.00</P_11><P_12>8</P_12></FaWiersz>""".encode()
+    altered = invoice_xml.replace(
+        b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1>",
+        b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1>"
+        b"<P_13_2>50.00</P_13_2><P_14_2>4.00</P_14_2>",
+    ).replace(
+        b"<RodzajFaktury>VAT</RodzajFaktury>",
+        second_row + b"<RodzajFaktury>VAT</RodzajFaktury>",
+    )
+    html = render_fa3_html(altered)
+    assert "23%" in html
+    assert "8%" in html
+    assert "Netto 23%</span><strong>100.00 PLN" in html
+    assert "VAT 23%</span><strong>23.00 PLN" in html
+    assert "Netto 8%</span><strong>50.00 PLN" in html
+    assert "VAT 8%</span><strong>4.00 PLN" in html
+
+
+@pytest.mark.parametrize(
+    ("source_rate", "label", "net_field"),
+    [
+        ("23", "23%", "P_13_1"),
+        ("8", "8%", "P_13_2"),
+        ("5", "5%", "P_13_3"),
+        ("0 KR", "0% (krajowa)", "P_13_6_1"),
+        ("0 WDT", "0% (WDT)", "P_13_6_2"),
+        ("0 EX", "0% (eksport)", "P_13_6_3"),
+    ],
+)
+def test_supported_rates_and_zero_rate_variants(
+    invoice_xml: bytes, source_rate: str, label: str, net_field: str
+) -> None:
+    altered = invoice_xml.replace(
+        b"<P_12>23</P_12>", f"<P_12>{source_rate}</P_12>".encode()
+    )
+    if source_rate != "23":
+        altered = altered.replace(b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1>", b"")
+        summary = f"<{net_field}>100.00</{net_field}>"
+        tax_field = {"8": "P_14_2", "5": "P_14_3"}.get(source_rate)
+        if tax_field:
+            summary += f"<{tax_field}>{source_rate}.00</{tax_field}>"
+        altered = altered.replace(b"<P_15>", f"{summary}<P_15>".encode())
+    html = render_fa3_html(altered)
+    assert label in html
+    assert f"Netto {label}</span><strong>100.00 PLN" in html
+    if source_rate.startswith("0 "):
+        assert "VAT 0%" not in html
+
+
+def test_multiple_rows_preserve_xml_order_and_source_numbers(
+    invoice_xml: bytes,
+) -> None:
+    row = b"""<FaWiersz><NrWierszaFa>42</NrWierszaFa><P_7>Druga &amp; &lt;b&gt;pozycja&lt;/b&gt;</P_7>
+      <P_8A>opak.</P_8A><P_8B>2</P_8B><P_9A>10.00</P_9A><P_11>20.00</P_11><P_12>23</P_12></FaWiersz>"""
+    altered = invoice_xml.replace(
+        b"<RodzajFaktury>VAT</RodzajFaktury>",
+        row + b"<RodzajFaktury>VAT</RodzajFaktury>",
+    )
+    html = render_fa3_html(altered)
+    assert html.index("<td>1</td>") < html.index("<td>42</td>")
+    assert "Druga &amp; &lt;b&gt;pozycja&lt;/b&gt;" in html
+    assert "<td>2 opak.</td>" in html
+    assert "<td>20.00 PLN</td>" in html
+
+
+def test_unsupported_rate_is_rejected(invoice_xml: bytes) -> None:
+    with pytest.raises(UnsupportedDocumentError, match="Nieobsługiwana stawka VAT"):
+        render_fa3_html(invoice_xml.replace(b"<P_12>23</P_12>", b"<P_12>7</P_12>"))
+
+
+def test_missing_required_summary_field_is_rejected(invoice_xml: bytes) -> None:
+    altered = invoice_xml.replace(b"<P_14_1>23.00</P_14_1>", b"")
+    with pytest.raises(UnsupportedDocumentError, match="Niepełne podsumowanie VAT"):
+        render_fa3_html(altered)
+
+
+def test_ambiguous_zero_rate_is_rejected(invoice_xml: bytes) -> None:
+    altered = invoice_xml.replace(b"<P_12>23</P_12>", b"<P_12>0</P_12>")
+    with pytest.raises(UnsupportedDocumentError, match="Nieobsługiwana stawka VAT"):
         render_fa3_html(altered)
 
 

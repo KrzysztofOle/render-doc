@@ -30,12 +30,19 @@ lub nieobsługiwany dokument.
 
 ## Profil danych
 
-Obsługiwany jest wariant FA(3) `1-0E`, podstawowa faktura `VAT`, PLN i pozycje
-ze stawką `23`. Renderer pokazuje `P_2`, `P_1`, dane identyfikacyjne
-`Podmiot1`/`Podmiot2`, pola pozycji `P_7`, `P_8A`, `P_8B`, `P_9A`, `P_11`,
-`P_12` oraz wartości zbiorcze `P_13_1`, `P_14_1`, `P_15` (należność ogółem,
-odpowiadająca wartości brutto w obsługiwanym profilu). Nie przelicza kwot.
-Nieobsługiwane elementy są odrzucane. Renderer nie wykonuje walidacji pełnej
+Obsługiwany jest wariant FA(3) `1-0E`, podstawowa faktura `VAT`, PLN oraz
+wiele pozycji ze stawkami `23`, `8`, `5`, `0 KR`, `0 WDT` i `0 EX`. Warianty
+0% są prezentowane oddzielnie (krajowy, WDT, eksport); `zw` i pozostałe kody
+są odrzucane. Renderer pokazuje `P_2`, `P_1`, dane `Podmiot1`/`Podmiot2` oraz
+pola wiersza `NrWierszaFa`, `P_7`, `P_8A`, `P_8B`, `P_9A`, `P_11`, `P_12`.
+
+Podsumowanie wartości netto i VAT pochodzi z `P_13_1`/`P_14_1` (23%),
+`P_13_2`/`P_14_2` (8%) oraz `P_13_3`/`P_14_3` (5%). Dla wariantów 0% netto
+pochodzi z `P_13_6_1` (krajowa), `P_13_6_2` (WDT) i `P_13_6_3` (eksport);
+FA(3) nie przewiduje dla nich osobnych sumarycznych pól VAT. Należność ogółem
+jest prezentowana z `P_15`. Brak sumarycznego pola wymaganego przez wykrytą
+stawkę powoduje `UnsupportedDocumentError`. Renderer nie przelicza ani nie
+sumuje kwot, a pozostałe elementy i warianty odrzuca. Nie waliduje pełnej
 zgodności z XSD FA(3).
 
 HTML zawiera wyłącznie wbudowany CSS, bez JavaScriptu, fontów, obrazów ani
