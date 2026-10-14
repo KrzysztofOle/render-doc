@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "render-doc"
-version = "0.1.0"
+version = "0.2.0"
 description = "Offline HTML rendering for a restricted FA(3) invoice profile"
 readme = "README.md"
 requires-python = ">=3.10"
