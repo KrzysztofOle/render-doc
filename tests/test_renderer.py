@@ -60,6 +60,11 @@ def invoice_xml() -> bytes:
 </Faktura>""".encode("utf-8")
 
 
+def _with_payment(invoice_xml: bytes, payment_fields: str) -> bytes:
+    payment = f"<Platnosc>{payment_fields}</Platnosc>".encode("utf-8")
+    return invoice_xml.replace(b"</Fa>", payment + b"</Fa>")
+
+
 def test_renders_supported_invoice_fields(invoice_xml: bytes) -> None:
     html = render_fa3_html(invoice_xml)
     assert '<html lang="pl">' in html
@@ -86,6 +91,12 @@ def test_legacy_call_matches_explicit_none(invoice_xml: bytes) -> None:
     assert render_fa3_html(invoice_xml) == render_fa3_html(
         invoice_xml, ksef_number=None
     )
+
+
+def test_invoice_without_payment_keeps_existing_output(invoice_xml: bytes) -> None:
+    html = render_fa3_html(invoice_xml)
+
+    assert "<section><h2>Płatność</h2>" not in html
 
 
 def test_ksef_number_requires_text_or_none(invoice_xml: bytes) -> None:
@@ -125,6 +136,92 @@ def test_ksef_number_rendering_is_deterministic_and_does_not_modify_xml(
 
     assert first == second
     assert invoice_xml == original
+
+
+def test_renders_single_payment_term_and_required_connector_payment_form(
+    invoice_xml: bytes,
+) -> None:
+    xml = _with_payment(
+        invoice_xml,
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        "<FormaPlatnosci>6</FormaPlatnosci>",
+    )
+
+    html = render_fa3_html(xml, ksef_number="SYNTHETIC-KSEF-001")
+
+    assert "<strong>Termin płatności:</strong> 2026-11-02" in html
+    assert "<strong>Forma płatności:</strong> Przelew" in html
+    assert html.index("Termin płatności") < html.index("Forma płatności")
+    assert "SYNTHETIC-KSEF-001" in html
+
+
+def test_payment_term_without_form_is_supported_by_render_doc(
+    invoice_xml: bytes,
+) -> None:
+    xml = _with_payment(
+        invoice_xml,
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>",
+    )
+
+    html = render_fa3_html(xml)
+
+    assert "<strong>Termin płatności:</strong> 2026-11-02" in html
+    assert "Forma płatności" not in html
+
+
+@pytest.mark.parametrize("value", ["2026-02-30", "02.11.2026", "2026-1-02", ""])
+def test_invalid_payment_term_date_is_rejected(
+    invoice_xml: bytes, value: str
+) -> None:
+    xml = _with_payment(
+        invoice_xml,
+        f"<TerminPlatnosci><Termin>{value}</Termin></TerminPlatnosci>",
+    )
+
+    with pytest.raises(UnsupportedDocumentError, match="Termin.*(prawidłowej daty|puste)"):
+        render_fa3_html(xml)
+
+
+@pytest.mark.parametrize(
+    "payment_fields",
+    [
+        "<Termin>2026-11-02</Termin>",
+        "<TerminPlatnosci><Termin>2026-11-02</Termin>"
+        "<TerminOpis><Ilosc>14</Ilosc></TerminOpis></TerminPlatnosci>",
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        "<TerminPlatnosci><Termin>2026-11-03</Termin></TerminPlatnosci>",
+        "<FormaPlatnosci>6</FormaPlatnosci>"
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>",
+        "<Zaplacono>1</Zaplacono>"
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>",
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        "<FormaPlatnosci>8</FormaPlatnosci>",
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        "<RachunekBankowy><NrRB>1234567890</NrRB></RachunekBankowy>",
+    ],
+)
+def test_unsupported_payment_variants_are_rejected(
+    invoice_xml: bytes, payment_fields: str
+) -> None:
+    with pytest.raises(UnsupportedDocumentError):
+        render_fa3_html(_with_payment(invoice_xml, payment_fields))
+
+
+def test_payment_rendering_is_deterministic_and_does_not_modify_xml(
+    invoice_xml: bytes,
+) -> None:
+    xml = _with_payment(
+        invoice_xml,
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        "<FormaPlatnosci>6</FormaPlatnosci>",
+    )
+    original = bytes(xml)
+
+    first = render_fa3_html(xml, ksef_number="SYNTHETIC-KSEF-001")
+    second = render_fa3_html(xml, ksef_number="SYNTHETIC-KSEF-001")
+
+    assert first == second
+    assert xml == original
 
 
 def test_p6_is_rendered_even_when_equal_to_issue_date(invoice_xml: bytes) -> None:

@@ -60,6 +60,10 @@ zamknięty zestaw nieaktywnych oznaczeń `Adnotacje` (wartości `2` dla `P_16`,
 o wartości `1`); aktywne lub nieznane warianty są odrzucane. Ogólne wpisy
 `DodatkowyOpis` z `Klucz` i `Wartosc` są prezentowane w kolejności źródłowej;
 wpisy z `NrWiersza` pozostają nieobsługiwane.
+W `Platnosc` obsługiwany jest tylko jeden `TerminPlatnosci` z dokładnie jednym
+`Termin`; `TerminOpis`, wiele terminów i pozostałe warianty płatności są
+odrzucane. Opcjonalne `FormaPlatnosci` może wystąpić po terminie, wyłącznie
+z kodem od `1` do `7`; renderer pokazuje wtedy jej nazwę.
 
 Podsumowanie wartości netto i VAT pochodzi z `P_13_1`/`P_14_1` (23%),
 `P_13_2`/`P_14_2` (8%) oraz `P_13_3`/`P_14_3` (5%). Dla wariantów 0% netto

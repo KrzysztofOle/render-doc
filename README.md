@@ -28,6 +28,10 @@ prezentuje opcjonalne `P_6` jako osobną datę dostawy lub wykonania usługi,
 zachowując je także wtedy, gdy jest równe `P_1`. Weryfikuje zamknięty zestaw
 nieaktywnych oznaczeń `Adnotacje` i prezentuje ogólne wpisy `DodatkowyOpis`
 złożone z `Klucz` i `Wartosc`; warianty przypisane do wierszy są odrzucane.
+W `Platnosc` obsługuje tylko jeden `TerminPlatnosci` zawierający wyłącznie
+jedno pole `Termin`; opcjonalne `FormaPlatnosci` jest akceptowane wyłącznie
+wraz z tym terminem, w kodach od `1` do `7`, i prezentowane nazwą. Terminy
+wielokrotne, `TerminOpis` i pozostałe warianty płatności są odrzucane.
 Odrzuca inne waluty, stawki i warianty 0%, rodzaje faktury, dodatkowe pola i warianty, które
 mogłyby zmienić znaczenie prezentacji. Nie obsługuje faktur korygujących,
 zaliczkowych, uproszczonych, marży, rabatów ani kategorii VAT poza wskazanymi

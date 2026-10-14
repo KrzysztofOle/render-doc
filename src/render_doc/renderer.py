@@ -160,6 +160,60 @@ _VAT_RATES = {
     "0 EX": ("0% (eksport)", "P_13_6_3", None),
 }
 
+_PAYMENT_FORMS = {
+    "1": "Gotówka",
+    "2": "Karta",
+    "3": "Bon",
+    "4": "Czek",
+    "5": "Kredyt",
+    "6": "Przelew",
+    "7": "Płatność mobilna",
+}
+
+
+def _payment_data(invoice: etree._Element) -> tuple[str, str]:
+    payments = invoice.findall(_qualified(invoice, "Platnosc"))
+    if len(payments) > 1:
+        raise UnsupportedDocumentError("Pole Platnosc występuje wielokrotnie.")
+    if not payments:
+        return "", ""
+
+    payment = payments[0]
+    _children(payment, {"TerminPlatnosci", "FormaPlatnosci"})
+    field_order = [
+        etree.QName(child).localname for child in payment if isinstance(child.tag, str)
+    ]
+    if field_order not in (
+        ["TerminPlatnosci"],
+        ["TerminPlatnosci", "FormaPlatnosci"],
+    ):
+        raise UnsupportedDocumentError(
+            "Obsługiwany jest wyłącznie pojedynczy TerminPlatnosci, "
+            "opcjonalnie z następującą po nim FormaPlatnosci."
+        )
+
+    term = _one(payment, "TerminPlatnosci")
+    _children(term, {"Termin"})
+    term_fields = [
+        etree.QName(child).localname for child in term if isinstance(child.tag, str)
+    ]
+    if term_fields != ["Termin"]:
+        raise UnsupportedDocumentError(
+            "Obsługiwany TerminPlatnosci zawiera wyłącznie jedno pole Termin."
+        )
+    due_date = _fa3_date(term, "Termin")
+
+    if len(field_order) == 1:
+        return due_date, ""
+    form_code = _text(payment, "FormaPlatnosci")
+    try:
+        payment_form = _PAYMENT_FORMS[form_code]
+    except KeyError as exc:
+        raise UnsupportedDocumentError(
+            "Nieobsługiwana wartość pola FormaPlatnosci."
+        ) from exc
+    return due_date, payment_form
+
 
 def _party(
     root: etree._Element, name: str, *, buyer: bool = False
@@ -258,6 +312,7 @@ def _parse_invoice(
         "RodzajFaktury",
         "Adnotacje",
         "DodatkowyOpis",
+        "Platnosc",
     }
     _children(invoice, allowed_invoice_fields)
     if _text(invoice, "RodzajFaktury") != "VAT":
@@ -300,6 +355,7 @@ def _parse_invoice(
     )
     _validate_annotations(invoice)
     additional_descriptions = _additional_descriptions(invoice)
+    payment_due_date, payment_form = _payment_data(invoice)
     summary: list[dict[str, str | None]] = []
     for code, (label, net_field, tax_field) in _VAT_RATES.items():
         has_net = bool(invoice.findall(_qualified(invoice, net_field)))
@@ -334,6 +390,8 @@ def _parse_invoice(
         "buyer_address": buyer_address,
         "gross": _decimal(invoice, "P_15"),
         "currency": currency,
+        "payment_due_date": payment_due_date,
+        "payment_form": payment_form,
     }
     return data, rows, summary, additional_descriptions
 
@@ -396,6 +454,18 @@ def render_fa3_html(
         if ksef_number is not None
         else ""
     )
+    payment_html = (
+        "\n<section><h2>Płatność</h2><p>"
+        f"<strong>Termin płatności:</strong> {_e(data['payment_due_date'])}"
+        + (
+            f"<br><strong>Forma płatności:</strong> {_e(data['payment_form'])}"
+            if data["payment_form"]
+            else ""
+        )
+        + "</p></section>"
+        if data["payment_due_date"]
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="pl">
 <head>
@@ -417,7 +487,7 @@ th {{ background: #eef2f5; }}
 </style>
 </head>
 <body>
-<header><h1>Faktura</h1><p><strong>Numer:</strong> {_e(data["number"])}<br><strong>Data wystawienia:</strong> {_e(data["issue_date"])}{delivery_date_html}</p></header>{ksef_number_html}
+<header><h1>Faktura</h1><p><strong>Numer:</strong> {_e(data["number"])}<br><strong>Data wystawienia:</strong> {_e(data["issue_date"])}{delivery_date_html}</p></header>{ksef_number_html}{payment_html}
 <div class="parties">
 <section><h2>Sprzedawca</h2><p>{_e(data["seller"])}<br>{seller_address}</p></section>
 <section><h2>Nabywca</h2><p>{_e(data["buyer"])}<br>{buyer_address}</p></section>

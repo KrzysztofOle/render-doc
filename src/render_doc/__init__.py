@@ -22,4 +22,4 @@ __all__ = [
     "UnsupportedDocumentError",
     "render_fa3_html",
 ]
-__version__ = "0.1.0"
+__version__ = "0.2.0"
