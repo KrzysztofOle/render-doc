@@ -169,6 +169,68 @@ def test_payment_term_without_form_is_supported_by_render_doc(
     assert "Forma płatności" not in html
 
 
+def test_renders_exempt_sales_with_multiple_rates_and_bank_account(
+    invoice_xml: bytes,
+) -> None:
+    second_row = (
+        b"<FaWiersz><NrWierszaFa>2</NrWierszaFa><P_7>Stawka 8</P_7>"
+        b"<P_8B>1</P_8B><P_9A>50.00</P_9A><P_11>50.00</P_11><P_12>8</P_12></FaWiersz>"
+    )
+    exempt_row = (
+        b"<FaWiersz><NrWierszaFa>3</NrWierszaFa><P_7>Zwolniona</P_7>"
+        b"<P_8B>2</P_8B><P_9A>20.00</P_9A><P_11>40.00</P_11><P_12>zw</P_12></FaWiersz>"
+    )
+    xml = invoice_xml.replace(
+        b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1><P_15>123.00</P_15>",
+        b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1>"
+        b"<P_13_2>50.00</P_13_2><P_14_2>4.00</P_14_2><P_13_7>40.00</P_13_7>"
+        b"<P_15>217.00</P_15>",
+    ).replace(
+        b"<RodzajFaktury>VAT</RodzajFaktury>",
+        second_row + exempt_row + b"<RodzajFaktury>VAT</RodzajFaktury>",
+    )
+    xml = _with_payment(
+        xml,
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        "<FormaPlatnosci>6</FormaPlatnosci>"
+        "<RachunekBankowy><NrRB>1234567890</NrRB></RachunekBankowy>",
+    )
+
+    html = render_fa3_html(xml)
+
+    assert html.index("<td>1</td>") < html.index("<td>2</td>") < html.index("<td>3</td>")
+    assert "Zwolniona" in html
+    assert "<td>zwolniona</td>" in html
+    assert "Netto zwolniona</span><strong>40.00 PLN" in html
+    assert "VAT zwolniona" not in html
+    assert "Netto 8%</span><strong>50.00 PLN" in html
+    assert "VAT 8%</span><strong>4.00 PLN" in html
+    assert "Rachunek bankowy:</strong> 1234567890" in html
+    assert "Kwota należności ogółem</span><strong>217.00 PLN" in html
+
+
+@pytest.mark.parametrize(
+    "account_xml",
+    [
+        "<RachunekBankowy/>",
+        "<RachunekBankowy><NrRB>1234567890</NrRB><SWIFT>ABC</SWIFT></RachunekBankowy>",
+        "<RachunekBankowy><NrRB>1234567890</NrRB></RachunekBankowy>"
+        "<RachunekBankowy><NrRB>0987654321</NrRB></RachunekBankowy>",
+    ],
+)
+def test_unsupported_bank_account_variants_are_rejected(
+    invoice_xml: bytes, account_xml: str
+) -> None:
+    xml = _with_payment(
+        invoice_xml,
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        + account_xml,
+    )
+
+    with pytest.raises(UnsupportedDocumentError):
+        render_fa3_html(xml)
+
+
 @pytest.mark.parametrize("value", ["2026-02-30", "02.11.2026", "2026-1-02", ""])
 def test_invalid_payment_term_date_is_rejected(
     invoice_xml: bytes, value: str
@@ -196,8 +258,6 @@ def test_invalid_payment_term_date_is_rejected(
         "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>",
         "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
         "<FormaPlatnosci>8</FormaPlatnosci>",
-        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
-        "<RachunekBankowy><NrRB>1234567890</NrRB></RachunekBankowy>",
     ],
 )
 def test_unsupported_payment_variants_are_rejected(
@@ -463,6 +523,13 @@ def test_multiple_rows_preserve_xml_order_and_source_numbers(
 def test_unsupported_rate_is_rejected(invoice_xml: bytes) -> None:
     with pytest.raises(UnsupportedDocumentError, match="Nieobsługiwana stawka VAT"):
         render_fa3_html(invoice_xml.replace(b"<P_12>23</P_12>", b"<P_12>7</P_12>"))
+
+
+def test_exempt_rate_requires_p13_7_summary(invoice_xml: bytes) -> None:
+    xml = invoice_xml.replace(b"<P_12>23</P_12>", b"<P_12>zw</P_12>")
+
+    with pytest.raises(UnsupportedDocumentError, match="Brak wymaganych pól sumarycznych.*zwolniona"):
+        render_fa3_html(xml)
 
 
 def test_missing_required_summary_field_is_rejected(invoice_xml: bytes) -> None:

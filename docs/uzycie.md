@@ -46,9 +46,10 @@ lub nieobsługiwany dokument.
 ## Profil danych
 
 Obsługiwany jest wariant FA(3) `1-0E`, podstawowa faktura `VAT`, PLN oraz
-wiele pozycji ze stawkami `23`, `8`, `5`, `0 KR`, `0 WDT` i `0 EX`. Warianty
-0% są prezentowane oddzielnie (krajowy, WDT, eksport); `zw` i pozostałe kody
-są odrzucane. W `Podmiot2` wymagane są pola `JST=2` i `GV=2`; oznaczają one,
+wiele pozycji ze stawkami `23`, `8`, `5`, `0 KR`, `0 WDT`, `0 EX` i `zw`.
+Warianty 0% są prezentowane oddzielnie (krajowy, WDT, eksport), a `zw` jako
+sprzedaż zwolniona. Pozostałe kody są odrzucane. W `Podmiot2` wymagane są pola
+`JST=2` i `GV=2`; oznaczają one,
 że faktura nie dotyczy jednostki podrzędnej JST ani członka grupy VAT. Wartość
 `1` oraz inne wartości są odrzucane. `Podmiot3` pozostaje nieobsługiwany.
 Renderer pokazuje `P_2`, `P_1`, dane `Podmiot1`/`Podmiot2` oraz
@@ -63,13 +64,18 @@ wpisy z `NrWiersza` pozostają nieobsługiwane.
 W `Platnosc` obsługiwany jest tylko jeden `TerminPlatnosci` z dokładnie jednym
 `Termin`; `TerminOpis`, wiele terminów i pozostałe warianty płatności są
 odrzucane. Opcjonalne `FormaPlatnosci` może wystąpić po terminie, wyłącznie
-z kodem od `1` do `7`; renderer pokazuje wtedy jej nazwę.
+z kodem od `1` do `7`; renderer pokazuje wtedy jej nazwę. Po terminie i formie
+po terminie i opcjonalnej formie może wystąpić jeden `RachunekBankowy`
+zawierający wyłącznie wymagane `NrRB`;
+numer jest prezentowany w sekcji płatności. Dodatkowe pola rachunku oraz inne
+kolejności są odrzucane.
 
 Podsumowanie wartości netto i VAT pochodzi z `P_13_1`/`P_14_1` (23%),
 `P_13_2`/`P_14_2` (8%) oraz `P_13_3`/`P_14_3` (5%). Dla wariantów 0% netto
 pochodzi z `P_13_6_1` (krajowa), `P_13_6_2` (WDT) i `P_13_6_3` (eksport);
-FA(3) nie przewiduje dla nich osobnych sumarycznych pól VAT. Należność ogółem
-jest prezentowana z `P_15`. Brak sumarycznego pola wymaganego przez wykrytą
+dla `zw` pochodzi z `P_13_7`. FA(3) nie przewiduje dla tych kategorii osobnych
+sumarycznych pól VAT. Należność ogółem jest prezentowana z `P_15`. Brak
+sumarycznego pola wymaganego przez wykrytą
 stawkę powoduje `UnsupportedDocumentError`. Renderer nie przelicza ani nie
 sumuje kwot, a pozostałe elementy i warianty odrzuca. Nie waliduje pełnej
 zgodności z XSD FA(3).

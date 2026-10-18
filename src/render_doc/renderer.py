@@ -2,12 +2,12 @@
 
 Features (EN):
 - Parses XML without loading DTDs, entities, or network resources.
-- Renders a restricted PLN, 23% VAT basic invoice profile.
-- Renders multiple rows with 23%, 8%, 5%, and explicit 0% variants.
+- Renders a restricted PLN basic invoice profile.
+- Renders multiple rows, including exempt sales and supported payment details.
 
 Funkcje (PL):
 - Parsuje XML bez wczytywania DTD, encji ani zasobów sieciowych.
-- Renderuje ograniczony profil faktury PLN ze stawkami 23%, 8%, 5% i wariantami 0%.
+- Renderuje ograniczony profil faktury PLN, w tym sprzedaż zwolnioną i obsługiwane dane płatności.
 
 File: src/render_doc/renderer.py
 """
@@ -158,6 +158,7 @@ _VAT_RATES = {
     "0 KR": ("0% (krajowa)", "P_13_6_1", None),
     "0 WDT": ("0% (WDT)", "P_13_6_2", None),
     "0 EX": ("0% (eksport)", "P_13_6_3", None),
+    "zw": ("zwolniona", "P_13_7", None),
 }
 
 _PAYMENT_FORMS = {
@@ -171,25 +172,27 @@ _PAYMENT_FORMS = {
 }
 
 
-def _payment_data(invoice: etree._Element) -> tuple[str, str]:
+def _payment_data(invoice: etree._Element) -> tuple[str, str, str]:
     payments = invoice.findall(_qualified(invoice, "Platnosc"))
     if len(payments) > 1:
         raise UnsupportedDocumentError("Pole Platnosc występuje wielokrotnie.")
     if not payments:
-        return "", ""
+        return "", "", ""
 
     payment = payments[0]
-    _children(payment, {"TerminPlatnosci", "FormaPlatnosci"})
+    _children(payment, {"TerminPlatnosci", "FormaPlatnosci", "RachunekBankowy"})
     field_order = [
         etree.QName(child).localname for child in payment if isinstance(child.tag, str)
     ]
     if field_order not in (
         ["TerminPlatnosci"],
         ["TerminPlatnosci", "FormaPlatnosci"],
+        ["TerminPlatnosci", "RachunekBankowy"],
+        ["TerminPlatnosci", "FormaPlatnosci", "RachunekBankowy"],
     ):
         raise UnsupportedDocumentError(
             "Obsługiwany jest wyłącznie pojedynczy TerminPlatnosci, "
-            "opcjonalnie z następującą po nim FormaPlatnosci."
+            "opcjonalnie z FormaPlatnosci i pojedynczym RachunekBankowy w kolejności FA(3)."
         )
 
     term = _one(payment, "TerminPlatnosci")
@@ -203,16 +206,22 @@ def _payment_data(invoice: etree._Element) -> tuple[str, str]:
         )
     due_date = _fa3_date(term, "Termin")
 
-    if len(field_order) == 1:
-        return due_date, ""
-    form_code = _text(payment, "FormaPlatnosci")
-    try:
-        payment_form = _PAYMENT_FORMS[form_code]
-    except KeyError as exc:
-        raise UnsupportedDocumentError(
-            "Nieobsługiwana wartość pola FormaPlatnosci."
-        ) from exc
-    return due_date, payment_form
+    payment_form = ""
+    if "FormaPlatnosci" in field_order:
+        form_code = _text(payment, "FormaPlatnosci")
+        try:
+            payment_form = _PAYMENT_FORMS[form_code]
+        except KeyError as exc:
+            raise UnsupportedDocumentError(
+                "Nieobsługiwana wartość pola FormaPlatnosci."
+            ) from exc
+
+    bank_account = ""
+    if "RachunekBankowy" in field_order:
+        account = _one(payment, "RachunekBankowy")
+        _children(account, {"NrRB"})
+        bank_account = _text(account, "NrRB")
+    return due_date, payment_form, bank_account
 
 
 def _party(
@@ -355,7 +364,7 @@ def _parse_invoice(
     )
     _validate_annotations(invoice)
     additional_descriptions = _additional_descriptions(invoice)
-    payment_due_date, payment_form = _payment_data(invoice)
+    payment_due_date, payment_form, bank_account = _payment_data(invoice)
     summary: list[dict[str, str | None]] = []
     for code, (label, net_field, tax_field) in _VAT_RATES.items():
         has_net = bool(invoice.findall(_qualified(invoice, net_field)))
@@ -392,6 +401,7 @@ def _parse_invoice(
         "currency": currency,
         "payment_due_date": payment_due_date,
         "payment_form": payment_form,
+        "bank_account": bank_account,
     }
     return data, rows, summary, additional_descriptions
 
@@ -460,6 +470,11 @@ def render_fa3_html(
         + (
             f"<br><strong>Forma płatności:</strong> {_e(data['payment_form'])}"
             if data["payment_form"]
+            else ""
+        )
+        + (
+            f"<br><strong>Rachunek bankowy:</strong> {_e(data['bank_account'])}"
+            if data["bank_account"]
             else ""
         )
         + "</p></section>"
