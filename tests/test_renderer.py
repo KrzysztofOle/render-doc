@@ -99,8 +99,9 @@ def test_classic_template_preserves_legacy_default_and_is_deterministic(invoice_
     classic = render_fa3_html(invoice_xml, template="classic", ksef_number="SYNTHETIC-12345678901234567890")
     assert classic == render_fa3_html(invoice_xml, template="classic", ksef_number="SYNTHETIC-12345678901234567890")
     assert 'font: 14px Arial' in classic
+    assert "@page { size: A4; margin: 12mm; }" in classic
     assert "Numer KSeF:</strong> SYNTHETIC-12345678901234567890" in classic
-    assert "Podsumowanie VAT" in classic and "Do zapłaty: 123.00 PLN" in classic
+    assert "Podsumowanie VAT" in classic and "Do zapłaty: 123,00 PLN" in classic
     assert "grid-template-columns" not in classic and "display: flex" not in classic
 
 
@@ -137,6 +138,25 @@ def test_classic_template_handles_mixed_vat_and_long_values(invoice_xml: bytes) 
     assert "Dlugie imie firmy" in html and "9" * 100 in html
     assert "overflow-wrap: anywhere" in html
     assert "<script" not in html.lower() and "<link" not in html.lower()
+
+
+def test_classic_template_formats_numbers_in_polish_without_changing_xml(
+    invoice_xml: bytes,
+) -> None:
+    altered = invoice_xml.replace(
+        b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1><P_15>123.00</P_15>",
+        b"<P_13_1>1234567.89</P_13_1><P_14_1>283950.6147</P_14_1>"
+        b"<P_15>1518518.5047</P_15>",
+    ).replace(b"<P_8B>1</P_8B>", b"<P_8B>12345.678</P_8B>")
+    original = bytes(altered)
+
+    html = render_fa3_html(altered, template="classic")
+
+    assert "12\u00a0345,678 szt." in html
+    assert "1\u00a0234\u00a0567,89 PLN" in html
+    assert "283\u00a0950,6147 PLN" in html
+    assert "1\u00a0518\u00a0518,5047 PLN" in html
+    assert altered == original
 
 
 def test_unknown_template_is_rejected(invoice_xml: bytes) -> None:

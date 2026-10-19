@@ -109,6 +109,9 @@ Opcja `--template` przyjmuje `default` lub `classic` i domyślnie wybiera
 dotychczasowy wygląd `default`. CLI odczytuje wyłącznie wskazany lokalny plik
 XML i zapisuje HTML jako UTF-8.
 
+Zestaw pięciu syntetycznych przykładów FA(3) z XML i HTML znajduje się w
+[`docs/examples/classic/index.html`](docs/examples/classic/index.html).
+
 ## Testy
 
 Testy repozytorium używają syntetycznego dokumentu i nie potrzebują sieci ani

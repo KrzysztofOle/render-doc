@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>3</WariantFormularza>
+    <DataWytworzeniaFa>2026-10-14T10:00:00Z</DataWytworzeniaFa>
+  </Naglowek>
+  <Podmiot1>
+    <DaneIdentyfikacyjne><NIP>0000000000</NIP><Nazwa>Przykladowy Sprzedawca Sp. z o.o.</Nazwa></DaneIdentyfikacyjne>
+    <Adres><KodKraju>PL</KodKraju><AdresL1>Przykładowa 1, 00-001 Warszawa</AdresL1></Adres>
+  </Podmiot1>
+  <Podmiot2>
+    <DaneIdentyfikacyjne><NIP>0000000001</NIP><Nazwa>Testowy Nabywca</Nazwa></DaneIdentyfikacyjne>
+    <Adres><KodKraju>PL</KodKraju><AdresL1>Testowa 2, 00-002 Łódź</AdresL1></Adres>
+    <JST>2</JST><GV>2</GV>
+  </Podmiot2>
+  <Fa>
+    <KodWaluty>PLN</KodWaluty><P_1>2026-10-14</P_1><P_6>2026-10-14</P_6><P_2>SYN/2026/002</P_2>
+    <P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1><P_13_2>50.00</P_13_2><P_14_2>4.00</P_14_2><P_15>177.00</P_15>
+    <FaWiersz><NrWierszaFa>1</NrWierszaFa><P_7>Usługa &lt;hosting&gt;</P_7>
+      <P_8A>szt.</P_8A><P_8B>1</P_8B><P_9A>100.00</P_9A><P_11>100.00</P_11><P_12>23</P_12>
+    </FaWiersz>
+    <Adnotacje><P_16>2</P_16><P_17>2</P_17><P_18>2</P_18><P_18A>2</P_18A>
+      <Zwolnienie><P_19N>1</P_19N></Zwolnienie>
+      <NoweSrodkiTransportu><P_22N>1</P_22N></NoweSrodkiTransportu>
+      <P_23>2</P_23><PMarzy><P_PMarzyN>1</P_PMarzyN></PMarzy>
+    </Adnotacje>
+    <DodatkowyOpis><Klucz>Warunki</Klucz><Wartosc>Standardowe</Wartosc></DodatkowyOpis>
+    <FaWiersz><NrWierszaFa>2</NrWierszaFa><P_7>Materialy biurowe</P_7><P_8A>opak.</P_8A><P_8B>2</P_8B><P_9A>25.00</P_9A><P_11>50.00</P_11><P_12>8</P_12></FaWiersz><RodzajFaktury>VAT</RodzajFaktury>
+  </Fa>
+</Faktura>

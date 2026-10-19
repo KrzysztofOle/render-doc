@@ -49,6 +49,9 @@ Polecenie czyta lokalny plik, wywołuje publiczne API i zapisuje wynik UTF-8.
 Kod zakończenia `0` oznacza powodzenie, `2` błąd odczytu, zapisu, parsowania
 lub nieobsługiwany dokument.
 
+Syntetyczne przykłady dokumentów i wyrenderowanych plików HTML są dostępne pod
+[`examples/classic/index.html`](examples/classic/index.html).
+
 ## Profil danych
 
 Obsługiwany jest wariant FA(3) `1-0E`, podstawowa faktura `VAT`, PLN oraz

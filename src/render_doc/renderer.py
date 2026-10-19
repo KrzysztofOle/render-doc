@@ -15,6 +15,7 @@ File: src/render_doc/renderer.py
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from html import escape
 from io import BytesIO
 import re
@@ -410,6 +411,27 @@ def _e(value: str) -> str:
     return escape(value, quote=True)
 
 
+def _format_pl_number(value: str) -> str:
+    """Format a validated source decimal for Polish display without rounding."""
+    number = Decimal(value)
+    precision = max(0, -number.as_tuple().exponent)
+    formatted = f"{number:,.{precision}f}"
+    return formatted.replace(",", "\u00a0").replace(".", ",")
+
+
+def _party_html(label: str, value: str, address: list[str]) -> str:
+    """Render a party identity with name and NIP on separate lines."""
+    name, separator, nip = value.rpartition(" (NIP: ")
+    if not separator or not nip.endswith(")"):
+        name, nip = value, ""
+    nip_html = f'<p class="nip">NIP: {_e(nip[:-1])}</p>' if nip else ""
+    address_html = "<br>".join(_e(line) for line in address)
+    return (
+        f"<td><h2>{label}</h2><p class=\"party-name\">{_e(name)}</p>"
+        f"{nip_html}<p class=\"address\">{address_html}</p></td>"
+    )
+
+
 def _render_classic_html(
     data: dict[str, object],
     rows: list[dict[str, str]],
@@ -422,22 +444,22 @@ def _render_classic_html(
         "<tr>"
         f"<td class=\"number\">{_e(row['number'])}</td>"
         f"<td>{_e(row['description'])}</td>"
-        f"<td class=\"number\">{_e(row['quantity'])} {_e(row['unit']) if row['unit'] else '—'}</td>"
-        f"<td class=\"number\">{_e(row['unit_net'])} {_e(data['currency'])}</td>"
+        f"<td class=\"number\">{_e(_format_pl_number(row['quantity']))} {_e(row['unit']) if row['unit'] else '—'}</td>"
+        f"<td class=\"number\">{_e(_format_pl_number(row['unit_net']))} {_e(data['currency'])}</td>"
         f"<td class=\"number\">{_e(row['tax_rate'])}</td>"
-        f"<td class=\"number\">{_e(row['net'])} {_e(data['currency'])}</td>"
+        f"<td class=\"number\">{_e(_format_pl_number(row['net']))} {_e(data['currency'])}</td>"
         "</tr>"
         for row in rows
     )
     summary_html = "\n".join(
         "<tr>"
-        f"<td>{_e(item['rate'] or '')}</td><td class=\"number\">{_e(item['net'] or '')} {_e(data['currency'])}</td>"
-        f"<td class=\"number\">{_e(item['vat']) + ' ' + _e(data['currency']) if item['vat'] is not None else '—'}</td>"
+        f"<td>{_e(item['rate'] or '')}</td><td class=\"number\">{_e(_format_pl_number(item['net'] or '0'))} {_e(data['currency'])}</td>"
+        f"<td class=\"number\">{_e(_format_pl_number(item['vat'])) + ' ' + _e(data['currency']) if item['vat'] is not None else '—'}</td>"
         "</tr>"
         for item in summary
     )
     parties = "\n".join(
-        f"<td><h2>{label}</h2><p>{_e(data[key])}</p><p>{'<br>'.join(_e(v) for v in data[address_key])}</p></td>"
+        _party_html(label, data[key], data[address_key])
         for label, key, address_key in (
             ("Sprzedawca", "seller", "seller_address"),
             ("Nabywca", "buyer", "buyer_address"),
@@ -450,7 +472,9 @@ def _render_classic_html(
         ("Rachunek bankowy", "bank_account"),
     ):
         if data[key]:
-            payment_fields.append(f"<tr><th>{label}</th><td>{_e(data[key])}</td></tr>")
+            payment_fields.append(
+                f"<tr><th>{label}</th><td>{_e(data[key])}</td></tr>"
+            )
     payment_html = (
         "<section><h2>Płatność</h2><table class=\"details\">"
         + "".join(payment_fields)
@@ -480,18 +504,18 @@ def _render_classic_html(
     return f"""<!doctype html>
 <html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Faktura {_e(data['number'])}</title><style>
-* {{ box-sizing: border-box; }} body {{ margin: 12px auto; padding: 0 10px; max-width: 650px; color: #202020; background: #fff; font: 14px Arial, Helvetica, sans-serif; line-height: 1.35; }}
-h1 {{ margin: 0 0 8px; font-size: 20px; }} h2 {{ margin: 0 0 7px; font-size: 15px; }} p {{ margin: 4px 0; overflow-wrap: anywhere; }} section {{ margin: 10px 0; border: 1px solid #b8b8b8; padding: 8px; }}
-.meta, .parties, .items, .vat, .details {{ width: 100%; border-collapse: collapse; table-layout: fixed; }} .meta th, .meta td, .parties td, .items th, .items td, .vat th, .vat td, .details th, .details td {{ border: 1px solid #c7c7c7; padding: 5px; vertical-align: top; overflow-wrap: anywhere; }}
-.meta th, .details th {{ width: 43%; text-align: left; font-weight: normal; }} .parties {{ margin: 8px 0; }} .parties td {{ width: 50%; }} .items {{ font-size: 11px; }} .items th {{ text-align: left; background: #f2f2f2; }} .items th:nth-child(1) {{ width: 8%; }} .items th:nth-child(2) {{ width: 32%; }} .items th:nth-child(3) {{ width: 14%; }} .items th:nth-child(4) {{ width: 16%; }} .items th:nth-child(5) {{ width: 12%; }} .items th:nth-child(6) {{ width: 18%; }}
-.number {{ text-align: right; }} .due {{ margin: 10px 0; padding: 9px; border: 2px solid #555; text-align: right; font-size: 17px; }} .ksef {{ font-size: 12px; }}
-@media print {{ body {{ max-width: none; margin: 0; padding: 0; font-size: 10pt; }} section {{ break-inside: avoid; }} }}
+* {{ box-sizing: border-box; }} body {{ margin: 10px auto; padding: 0 10px; max-width: 650px; color: #202020; background: #fff; font: 14px Arial, Helvetica, sans-serif; line-height: 1.3; }}
+h1 {{ margin: 0; font-size: 20px; }} h2 {{ margin: 0 0 5px; font-size: 14px; }} p {{ margin: 3px 0; overflow-wrap: anywhere; }} section {{ margin: 8px 0; padding: 5px 0; }}
+.meta, .parties, .items, .vat, .details {{ width: 100%; border-collapse: collapse; table-layout: fixed; }} .meta th, .meta td, .parties td, .items th, .items td, .vat th, .vat td, .details th, .details td {{ border-bottom: 1px solid #c7c7c7; padding: 4px 5px; vertical-align: top; overflow-wrap: anywhere; }}
+.meta th, .details th {{ width: 43%; text-align: left; font-weight: normal; }} .parties {{ margin: 7px 0; }} .parties td {{ width: 50%; border-bottom: 1px solid #aaa; }} .nip, .address {{ color: #444; font-size: 12px; }} .items {{ font-size: 11px; }} .items th {{ text-align: left; border-top: 1px solid #777; background: #f4f4f4; }} .items th:nth-child(1) {{ width: 7%; }} .items th:nth-child(2) {{ width: 31%; }} .items th:nth-child(3) {{ width: 14%; }} .items th:nth-child(4) {{ width: 17%; }} .items th:nth-child(5) {{ width: 11%; }} .items th:nth-child(6) {{ width: 20%; }}
+.number {{ text-align: right; font-variant-numeric: tabular-nums; }} .vat th {{ border-top: 1px solid #777; text-align: left; background: #f4f4f4; }} .due {{ margin: 7px 0; padding: 7px 0; border-top: 2px solid #444; border-bottom: 2px solid #444; text-align: right; font-size: 17px; overflow-wrap: anywhere; }} .ksef {{ margin: 5px 0; font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }}
+@page {{ size: A4; margin: 12mm; }} @media print {{ body {{ max-width: none; margin: 0; padding: 0; font-size: 10pt; }} section {{ break-inside: avoid; }} }}
 </style></head><body><h1>Faktura {_e(data['number'])}</h1>
 <table class="meta"><tr><th>Data wystawienia</th><td>{_e(data['issue_date'])}</td></tr>{delivery}</table>{ksef}
 <table class="parties"><tr>{parties}</tr></table>{payment_html}
 <section><h2>Pozycje faktury</h2><table class="items"><thead><tr><th>Nr</th><th>Opis</th><th>Ilość / jedn.</th><th>Cena netto</th><th>VAT</th><th>Wartość netto</th></tr></thead><tbody>{line_html}</tbody></table></section>
 <section><h2>Podsumowanie VAT</h2><table class="vat"><thead><tr><th>Stawka</th><th class="number">Netto</th><th class="number">VAT</th></tr></thead><tbody>{summary_html}</tbody></table></section>
-<p class="due"><strong>Do zapłaty: {_e(data['gross'])} {_e(data['currency'])}</strong></p>{extra}</body></html>
+<p class="due"><strong>Do zapłaty: {_e(_format_pl_number(data['gross']))} {_e(data['currency'])}</strong></p>{extra}</body></html>
 """
 
 
