@@ -24,9 +24,13 @@ def main() -> int:
     )
     parser.add_argument("input", type=Path, help="Lokalny plik XML FA(3)")
     parser.add_argument("--output", required=True, type=Path, help="Docelowy plik HTML")
+    parser.add_argument(
+        "--template", choices=("default", "classic"), default="default",
+        help="Szablon wyglądu (domyślnie: dotychczasowy)",
+    )
     args = parser.parse_args()
     try:
-        html = render_fa3_html(args.input.read_bytes())
+        html = render_fa3_html(args.input.read_bytes(), template=args.template)
         args.output.write_text(html, encoding="utf-8", newline="\n")
     except (OSError, RenderDocError) as exc:
         print(f"render-doc: {exc}", file=sys.stderr)

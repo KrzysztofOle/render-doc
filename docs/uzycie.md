@@ -11,6 +11,11 @@ html = render_fa3_html(Path("faktura.xml").read_bytes())
 Path("faktura.html").write_text(html, encoding="utf-8")
 ```
 
+Wybór zwartego szablonu księgowego jest jawny: `render_fa3_html(xml_bytes,
+template="classic")`. Pominięcie parametru lub `template="default"` zachowuje
+dotychczasowy wygląd. Wartość `template` jest prezentacyjna i nie zmienia
+parsowania ani walidacji FA(3).
+
 Numer KSeF jest opcjonalnym metadatum od wywołującego. Przykład używa
 syntetycznej wartości testowej, a nie rzeczywistego numeru:
 
@@ -36,9 +41,10 @@ profilu powoduje `UnsupportedDocumentError`. Wyjątki można importować z
 Po instalacji pakietu:
 
 ```sh
-render-doc faktura.xml --output faktura.html
+render-doc faktura.xml --output faktura.html --template classic
 ```
 
+`--template` przyjmuje `default` lub `classic` i domyślnie wybiera `default`.
 Polecenie czyta lokalny plik, wywołuje publiczne API i zapisuje wynik UTF-8.
 Kod zakończenia `0` oznacza powodzenie, `2` błąd odczytu, zapisu, parsowania
 lub nieobsługiwany dokument.

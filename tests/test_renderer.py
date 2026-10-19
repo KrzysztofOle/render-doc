@@ -93,6 +93,57 @@ def test_legacy_call_matches_explicit_none(invoice_xml: bytes) -> None:
     )
 
 
+def test_classic_template_preserves_legacy_default_and_is_deterministic(invoice_xml: bytes) -> None:
+    legacy = render_fa3_html(invoice_xml)
+    assert legacy == render_fa3_html(invoice_xml, template="default")
+    classic = render_fa3_html(invoice_xml, template="classic", ksef_number="SYNTHETIC-12345678901234567890")
+    assert classic == render_fa3_html(invoice_xml, template="classic", ksef_number="SYNTHETIC-12345678901234567890")
+    assert 'font: 14px Arial' in classic
+    assert "Numer KSeF:</strong> SYNTHETIC-12345678901234567890" in classic
+    assert "Podsumowanie VAT" in classic and "Do zapłaty: 123.00 PLN" in classic
+    assert "grid-template-columns" not in classic and "display: flex" not in classic
+
+
+def test_classic_template_cli_selection(invoice_xml: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "invoice.xml", tmp_path / "invoice.html"
+    source.write_bytes(invoice_xml)
+    monkeypatch.setattr(sys, "argv", ["render-doc", str(source), "--output", str(output), "--template", "classic"])
+    assert main() == 0
+    assert output.read_text(encoding="utf-8") == render_fa3_html(invoice_xml, template="classic")
+
+
+def test_classic_template_escapes_untrusted_values(invoice_xml: bytes) -> None:
+    altered = invoice_xml.replace(b"<P_7>Us\xc5\x82uga &lt;hosting&gt;</P_7>", b"<P_7>&lt;script&gt;alert(1)&lt;/script&gt;</P_7>")
+    html = render_fa3_html(altered, template="classic", ksef_number="<script>")
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "Numer KSeF:</strong> &lt;script&gt;" in html
+    assert "<script>" not in html
+
+
+def test_classic_template_handles_mixed_vat_and_long_values(invoice_xml: bytes) -> None:
+    second_row = (
+        b"<FaWiersz><NrWierszaFa>2</NrWierszaFa>"
+        b"<P_7>" + (b"Opis pozycji " * 18) + b"</P_7>"
+        b"<P_8B>2</P_8B><P_9A>50.00</P_9A><P_11>100.00</P_11><P_12>8</P_12></FaWiersz>"
+    )
+    altered = invoice_xml.replace(
+        b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1>",
+        b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1>"
+        b"<P_13_2>100.00</P_13_2><P_14_2>8.00</P_14_2>",
+    ).replace(b"<RodzajFaktury>VAT</RodzajFaktury>", second_row + b"<RodzajFaktury>VAT</RodzajFaktury>")
+    altered = altered.replace(b"<Nazwa>Nabywca</Nazwa>", b"<Nazwa>" + (b"Dlugie imie firmy " * 12) + b"</Nazwa>")
+    html = render_fa3_html(altered, template="classic", ksef_number="KSEF-" + "9" * 100)
+    assert "Opis pozycji " in html and "8%" in html and "23%" in html
+    assert "Dlugie imie firmy" in html and "9" * 100 in html
+    assert "overflow-wrap: anywhere" in html
+    assert "<script" not in html.lower() and "<link" not in html.lower()
+
+
+def test_unknown_template_is_rejected(invoice_xml: bytes) -> None:
+    with pytest.raises(ValueError, match="template must"):
+        render_fa3_html(invoice_xml, template="unknown")
+
+
 def test_invoice_without_payment_keeps_existing_output(invoice_xml: bytes) -> None:
     html = render_fa3_html(invoice_xml)
 

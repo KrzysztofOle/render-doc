@@ -89,6 +89,11 @@ Bez parametru `ksef_number` renderer zachowuje dotychczasowe zachowanie i wynik.
 Numer pochodzi od wywołującego; renderer nie odczytuje go z XML ani nie
 komunikuje się z KSeF.
 
+Wygląd można jawnie wybrać przez `template="classic"`. `default` (wartość
+domyślna) zachowuje dotychczasowy HTML. Szablon `classic` jest zwartym układem
+księgowym z myślą o wąskim podglądzie; żaden z nich nie zmienia parsowania ani
+walidacji dokumentu.
+
 Publiczne API przyjmuje bytes. `InvalidXmlError` oznacza błąd parsowania lub
 odrzucony DTD, a `UnsupportedDocumentError` — dokument poza obsługiwanym
 profilem. Oba wyjątki oraz bazowy `RenderDocError` są dostępne z `render_doc`.
@@ -97,11 +102,12 @@ Parser nie pobiera zewnętrznych encji ani zasobów sieciowych.
 ## CLI
 
 ```sh
-render-doc faktura.xml --output faktura.html
+render-doc faktura.xml --output faktura.html --template classic
 ```
 
-CLI używa tego samego `render_fa3_html`; odczytuje wyłącznie wskazany lokalny
-plik XML i zapisuje HTML jako UTF-8.
+Opcja `--template` przyjmuje `default` lub `classic` i domyślnie wybiera
+dotychczasowy wygląd `default`. CLI odczytuje wyłącznie wskazany lokalny plik
+XML i zapisuje HTML jako UTF-8.
 
 ## Testy
 

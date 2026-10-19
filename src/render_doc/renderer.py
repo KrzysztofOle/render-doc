@@ -410,16 +410,106 @@ def _e(value: str) -> str:
     return escape(value, quote=True)
 
 
+def _render_classic_html(
+    data: dict[str, object],
+    rows: list[dict[str, str]],
+    summary: list[dict[str, str | None]],
+    additional_descriptions: list[dict[str, str]],
+    ksef_number: str | None,
+) -> str:
+    """Render parsed invoice data with the compact accounting layout."""
+    line_html = "\n".join(
+        "<tr>"
+        f"<td class=\"number\">{_e(row['number'])}</td>"
+        f"<td>{_e(row['description'])}</td>"
+        f"<td class=\"number\">{_e(row['quantity'])} {_e(row['unit']) if row['unit'] else '—'}</td>"
+        f"<td class=\"number\">{_e(row['unit_net'])} {_e(data['currency'])}</td>"
+        f"<td class=\"number\">{_e(row['tax_rate'])}</td>"
+        f"<td class=\"number\">{_e(row['net'])} {_e(data['currency'])}</td>"
+        "</tr>"
+        for row in rows
+    )
+    summary_html = "\n".join(
+        "<tr>"
+        f"<td>{_e(item['rate'] or '')}</td><td class=\"number\">{_e(item['net'] or '')} {_e(data['currency'])}</td>"
+        f"<td class=\"number\">{_e(item['vat']) + ' ' + _e(data['currency']) if item['vat'] is not None else '—'}</td>"
+        "</tr>"
+        for item in summary
+    )
+    parties = "\n".join(
+        f"<td><h2>{label}</h2><p>{_e(data[key])}</p><p>{'<br>'.join(_e(v) for v in data[address_key])}</p></td>"
+        for label, key, address_key in (
+            ("Sprzedawca", "seller", "seller_address"),
+            ("Nabywca", "buyer", "buyer_address"),
+        )
+    )
+    payment_fields = []
+    for label, key in (
+        ("Termin płatności", "payment_due_date"),
+        ("Forma płatności", "payment_form"),
+        ("Rachunek bankowy", "bank_account"),
+    ):
+        if data[key]:
+            payment_fields.append(f"<tr><th>{label}</th><td>{_e(data[key])}</td></tr>")
+    payment_html = (
+        "<section><h2>Płatność</h2><table class=\"details\">"
+        + "".join(payment_fields)
+        + "</table></section>"
+        if payment_fields
+        else ""
+    )
+    delivery = (
+        f"<tr><th>Data dostawy lub wykonania usługi</th><td>{_e(data['delivery_date'])}</td></tr>"
+        if data["delivery_date"]
+        else ""
+    )
+    ksef = (
+        f"<p class=\"ksef\"><strong>Numer KSeF:</strong> {_e(ksef_number)}</p>"
+        if ksef_number is not None
+        else ""
+    )
+    descriptions = "".join(
+        f"<tr><th>{_e(item['key'])}</th><td>{_e(item['value'])}</td></tr>"
+        for item in additional_descriptions
+    )
+    extra = (
+        f"<section><h2>Dodatkowe informacje</h2><table class=\"details\">{descriptions}</table></section>"
+        if descriptions
+        else ""
+    )
+    return f"""<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faktura {_e(data['number'])}</title><style>
+* {{ box-sizing: border-box; }} body {{ margin: 12px auto; padding: 0 10px; max-width: 650px; color: #202020; background: #fff; font: 14px Arial, Helvetica, sans-serif; line-height: 1.35; }}
+h1 {{ margin: 0 0 8px; font-size: 20px; }} h2 {{ margin: 0 0 7px; font-size: 15px; }} p {{ margin: 4px 0; overflow-wrap: anywhere; }} section {{ margin: 10px 0; border: 1px solid #b8b8b8; padding: 8px; }}
+.meta, .parties, .items, .vat, .details {{ width: 100%; border-collapse: collapse; table-layout: fixed; }} .meta th, .meta td, .parties td, .items th, .items td, .vat th, .vat td, .details th, .details td {{ border: 1px solid #c7c7c7; padding: 5px; vertical-align: top; overflow-wrap: anywhere; }}
+.meta th, .details th {{ width: 43%; text-align: left; font-weight: normal; }} .parties {{ margin: 8px 0; }} .parties td {{ width: 50%; }} .items {{ font-size: 11px; }} .items th {{ text-align: left; background: #f2f2f2; }} .items th:nth-child(1) {{ width: 8%; }} .items th:nth-child(2) {{ width: 32%; }} .items th:nth-child(3) {{ width: 14%; }} .items th:nth-child(4) {{ width: 16%; }} .items th:nth-child(5) {{ width: 12%; }} .items th:nth-child(6) {{ width: 18%; }}
+.number {{ text-align: right; }} .due {{ margin: 10px 0; padding: 9px; border: 2px solid #555; text-align: right; font-size: 17px; }} .ksef {{ font-size: 12px; }}
+@media print {{ body {{ max-width: none; margin: 0; padding: 0; font-size: 10pt; }} section {{ break-inside: avoid; }} }}
+</style></head><body><h1>Faktura {_e(data['number'])}</h1>
+<table class="meta"><tr><th>Data wystawienia</th><td>{_e(data['issue_date'])}</td></tr>{delivery}</table>{ksef}
+<table class="parties"><tr>{parties}</tr></table>{payment_html}
+<section><h2>Pozycje faktury</h2><table class="items"><thead><tr><th>Nr</th><th>Opis</th><th>Ilość / jedn.</th><th>Cena netto</th><th>VAT</th><th>Wartość netto</th></tr></thead><tbody>{line_html}</tbody></table></section>
+<section><h2>Podsumowanie VAT</h2><table class="vat"><thead><tr><th>Stawka</th><th class="number">Netto</th><th class="number">VAT</th></tr></thead><tbody>{summary_html}</tbody></table></section>
+<p class="due"><strong>Do zapłaty: {_e(data['gross'])} {_e(data['currency'])}</strong></p>{extra}</body></html>
+"""
+
+
 def render_fa3_html(
     xml_bytes: bytes,
     *,
     ksef_number: str | None = None,
+    template: str = "default",
 ) -> str:
     """Render a supported FA(3) XML invoice profile as HTML."""
     if ksef_number is not None and not isinstance(ksef_number, str):
         raise TypeError("ksef_number must be str or None")
+    if template not in ("default", "classic"):
+        raise ValueError("template must be 'default' or 'classic'")
 
     data, rows, summary, additional_descriptions = _parse_invoice(xml_bytes)
+    if template == "classic":
+        return _render_classic_html(data, rows, summary, additional_descriptions, ksef_number)
     line_html = "\n".join(
         "<tr>"
         f"<td>{_e(row['number'])}</td>"
