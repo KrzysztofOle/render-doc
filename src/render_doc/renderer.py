@@ -21,6 +21,7 @@ from io import BytesIO
 import re
 
 from lxml import etree
+from render_doc.ksef_template import render_ksef_template
 
 
 class RenderDocError(ValueError):
@@ -528,10 +529,12 @@ def render_fa3_html(
     """Render a supported FA(3) XML invoice profile as HTML."""
     if ksef_number is not None and not isinstance(ksef_number, str):
         raise TypeError("ksef_number must be str or None")
-    if template not in ("default", "classic"):
-        raise ValueError("template must be 'default' or 'classic'")
+    if template not in ("default", "classic", "ksef"):
+        raise ValueError("template must be 'default', 'classic' or 'ksef'")
 
     data, rows, summary, additional_descriptions = _parse_invoice(xml_bytes)
+    if template == "ksef":
+        return render_ksef_template(data, rows, summary, additional_descriptions, ksef_number)
     if template == "classic":
         return _render_classic_html(data, rows, summary, additional_descriptions, ksef_number)
     line_html = "\n".join(

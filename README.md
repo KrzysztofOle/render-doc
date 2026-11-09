@@ -89,10 +89,15 @@ Bez parametru `ksef_number` renderer zachowuje dotychczasowe zachowanie i wynik.
 Numer pochodzi od wywołującego; renderer nie odczytuje go z XML ani nie
 komunikuje się z KSeF.
 
-Wygląd można jawnie wybrać przez `template="classic"`. `default` (wartość
-domyślna) zachowuje dotychczasowy HTML. Szablon `classic` jest zwartym układem
-księgowym z myślą o wąskim podglądzie; żaden z nich nie zmienia parsowania ani
-walidacji dokumentu.
+Wygląd można jawnie wybrać przez `template="classic"` albo `template="ksef"`.
+`default` (wartość domyślna) zachowuje dotychczasowy HTML. Szablon `classic`
+jest zwartym układem księgowym, a nowy `ksef` to osobny, zbliżony do MF
+układ wydruku A4 (nagłówek KSeF, tabele pozycji i VAT, płatności, dane
+kontrahentów). Nowy układ nie zmienia parsera ani walidacji FA(3).
+Kolumna brutto według stawki jest informacyjną sumą netto i VAT z XML
+(dla stawki 0% i zw równa netto); należność ogółem pochodzi z `P_15`.
+R1 nie generuje kodu QR ani linku weryfikacyjnego (to osobny etap R2).
+Nie deklaruje zgodności 1:1 z PDF MF lub `DKF_Html` Optimy.
 
 Publiczne API przyjmuje bytes. `InvalidXmlError` oznacza błąd parsowania lub
 odrzucony DTD, a `UnsupportedDocumentError` — dokument poza obsługiwanym
@@ -105,9 +110,14 @@ Parser nie pobiera zewnętrznych encji ani zasobów sieciowych.
 render-doc faktura.xml --output faktura.html --template classic
 ```
 
-Opcja `--template` przyjmuje `default` lub `classic` i domyślnie wybiera
-dotychczasowy wygląd `default`. CLI odczytuje wyłącznie wskazany lokalny plik
-XML i zapisuje HTML jako UTF-8.
+Opcja `--template` przyjmuje `default`, `classic` lub `ksef` i domyślnie
+wybiera dotychczasowy wygląd `default`. Dla układu MF-podobnego użyj:
+
+```sh
+render-doc faktura.xml --output faktura-ksef.html --template ksef
+```
+
+CLI odczytuje wyłącznie wskazany lokalny XML i zapisuje HTML jako UTF-8.
 
 Zestaw pięciu syntetycznych przykładów FA(3) z XML i HTML znajduje się w
 [`docs/examples/classic/index.html`](docs/examples/classic/index.html).
