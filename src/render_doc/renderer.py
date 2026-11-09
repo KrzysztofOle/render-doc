@@ -22,6 +22,7 @@ import re
 
 from lxml import etree
 from render_doc.ksef_template import render_ksef_template
+from render_doc.ksef_verification import KsefVerification, _verification_panel
 
 
 class RenderDocError(ValueError):
@@ -525,16 +526,32 @@ def render_fa3_html(
     *,
     ksef_number: str | None = None,
     template: str = "default",
+    verification: KsefVerification | None = None,
 ) -> str:
-    """Render a supported FA(3) XML invoice profile as HTML."""
+    """Render a supported FA(3) XML invoice profile as HTML.
+
+    Verification is explicit and caller-attested; no KSeF network request occurs.
+    """
     if ksef_number is not None and not isinstance(ksef_number, str):
         raise TypeError("ksef_number must be str or None")
     if template not in ("default", "classic", "ksef"):
         raise ValueError("template must be 'default', 'classic' or 'ksef'")
+    if verification is not None:
+        if not isinstance(verification, KsefVerification):
+            raise TypeError("verification must be KsefVerification or None")
+        if template != "ksef":
+            raise ValueError("KSeF verification requires template='ksef'")
+        if ksef_number is not None and ksef_number != verification.ksef_number:
+            raise ValueError("KSeF number mismatch between arguments and verification")
 
     data, rows, summary, additional_descriptions = _parse_invoice(xml_bytes)
     if template == "ksef":
-        return render_ksef_template(data, rows, summary, additional_descriptions, ksef_number)
+        effective_number = verification.ksef_number if verification is not None else ksef_number
+        panel = _verification_panel(xml_bytes, data, verification) if verification is not None else ""
+        return render_ksef_template(
+            data, rows, summary, additional_descriptions,
+            effective_number, verification_panel=panel,
+        )
     if template == "classic":
         return _render_classic_html(data, rows, summary, additional_descriptions, ksef_number)
     line_html = "\n".join(

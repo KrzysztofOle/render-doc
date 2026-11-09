@@ -9,6 +9,7 @@ Funkcje (PL):
 File: src/render_doc/__init__.py
 """
 
+from render_doc.ksef_verification import KsefVerification
 from render_doc.renderer import (
     InvalidXmlError,
     RenderDocError,
@@ -18,6 +19,7 @@ from render_doc.renderer import (
 
 __all__ = [
     "InvalidXmlError",
+    "KsefVerification",
     "RenderDocError",
     "UnsupportedDocumentError",
     "render_fa3_html",

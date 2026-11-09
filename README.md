@@ -53,7 +53,9 @@ python3 -m venv .venv
 python -m pip install -e .
 ```
 
-Pakiet wymaga `lxml >=5.0,<7` (BSD-3-Clause); libxml2 i libxslt są na licencji
+Pakiet wymaga `lxml >=5.0,<7` (BSD-3-Clause) oraz `qrcode[pil] >=8,<9`
+(BSD-3-Clause, z biblioteką obrazów Pillow — HPND; generowanie PNG QR
+jest lokalne, bez zewnętrznej usługi). libxml2 i libxslt są na licencji
 MIT. Szczegóły licencji dołączonych bibliotek mogą zależeć od dystrybucji
 `lxml`; oficjalne koła binarne mogą też zawierać m.in. zlib i iconv. Zobacz
 [wykaz licencji lxml](https://github.com/lxml/lxml/blob/master/LICENSES.txt).
@@ -96,7 +98,40 @@ układ wydruku A4 (nagłówek KSeF, tabele pozycji i VAT, płatności, dane
 kontrahentów). Nowy układ nie zmienia parsera ani walidacji FA(3).
 Kolumna brutto według stawki jest informacyjną sumą netto i VAT z XML
 (dla stawki 0% i zw równa netto); należność ogółem pochodzi z `P_15`.
-R1 nie generuje kodu QR ani linku weryfikacyjnego (to osobny etap R2).
+Szablon `ksef` może wygenerować lokalnie QR **KOD I** i klikalny URL,
+ale wyłącznie po jawnym przekazaniu metadanych przyjętej faktury:
+`KsefVerification(environment="TEST"|"DEMO"|"PROD", ksef_number=...)`.
+Bez tych metadanych nie emituje żadnego QR ani pozornego potwierdzenia.
+KOD II (certyfikat i klucz prywatny) nie jest implementowany.
+
+Przykład publicznego API (XML musi zawierać **niezmienione bajty otrzymane z
+KSeF**, a numer musi pochodzić z potwierdzonego odbioru — nie z XML):
+
+```python
+from pathlib import Path
+from render_doc import KsefVerification, render_fa3_html
+
+original_xml = Path("oryginalna-faktura-fa3.xml").read_bytes()
+verification = KsefVerification(
+    environment="DEMO",
+    ksef_number="0000000000-20261109-SYNTHETIC",  # tylko przykład!
+)
+html = render_fa3_html(
+    original_xml, template="ksef", verification=verification
+)
+Path("podglad-z-qr.html").write_text(html, encoding="utf-8")
+```
+
+Adres w QR ma postać `https://qr-<środowisko>.ksef.mf.gov.pl/invoice/NIP/DD-MM-RRRR/SHA256_BASE64URL`;
+dla PROD bazą jest `https://qr.ksef.mf.gov.pl`, a hash jest liczony z
+**dokładnych bajtów wejściowego XML**, bez ponownej serializacji. QR jest osadzony
+w HTML jako PNG `data:image/png;base64`, bez JavaScript i pobierania obrazów.
+Dopuszczalny link HTTPS otwiera się tylko po kliknięciu lub zeskanowaniu.
+**Wygenerowanie QR nie oznacza, że KSeF potwierdził dokument.**
+Bez `KsefVerification` także `template="ksef"` zachowuje wariant bez QR.
+`default` i `classic` nie mogą otrzymać `verification` i nie zmieniają
+swojego dotychczasowego HTML.
+
 Nie deklaruje zgodności 1:1 z PDF MF lub `DKF_Html` Optimy.
 
 Publiczne API przyjmuje bytes. `InvalidXmlError` oznacza błąd parsowania lub
@@ -117,6 +152,14 @@ wybiera dotychczasowy wygląd `default`. Dla układu MF-podobnego użyj:
 render-doc faktura.xml --output faktura-ksef.html --template ksef
 ```
 
+W celu wygenerowania KOD I wymagane są **obie** dodatkowe opcje:
+```sh
+render-doc oryginalna-faktura-fa3.xml --output faktura-z-qr.html \
+  --template ksef --qr-environment DEMO \
+  --ksef-number 0000000000-20261109-SYNTHETIC
+```
+Przykładowy numer jest sztuczny; wygenerowany link nie będzie dowodem istnienia
+faktury. CLI odrzuca niepełne metadane QR.
 CLI odczytuje wyłącznie wskazany lokalny XML i zapisuje HTML jako UTF-8.
 
 Zestaw pięciu syntetycznych przykładów FA(3) z XML i HTML znajduje się w
@@ -137,4 +180,5 @@ Mapowanie pól oparto na [oficjalnej broszurze FA(3) Ministerstwa Finansów](htt
 Oficjalna strona [wzoru FA(3) w CRWDE](https://crd.gov.pl/wzor/2025/06/25/13775/)
 udostępnia także odnośnik do `styl.xsl`; jego zawartości, licencji i zachowania
 nie zweryfikowano, więc renderer nie używa ani nie kopiuje tego pliku. Projekt
-jest na licencji Apache 2.0; jedyną zależnością runtime jest `lxml`.
+jest na licencji Apache 2.0; zależności runtime to `lxml` oraz
+`qrcode[pil]` wraz z Pillow do generowania PNG.

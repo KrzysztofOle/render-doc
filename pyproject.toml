@@ -9,7 +9,7 @@ description = "Offline HTML rendering for a restricted FA(3) invoice profile"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
-dependencies = ["lxml>=5.0,<7"]
+dependencies = ["lxml>=5.0,<7", "qrcode[pil]>=8,<9"]
 
 [project.scripts]
 render-doc = "render_doc.cli:main"

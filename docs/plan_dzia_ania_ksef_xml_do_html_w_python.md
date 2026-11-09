@@ -1,6 +1,6 @@
 # Plan rozwoju `render-doc`: wizualizacja FA(3) jak w KSeF, QR i integracja z Optimą
 
-> **Status:** R0 zweryfikowany źródłowo; R1 zaimplementowany w opt-in, pełna regresja i porównanie MF pending; R2–R4 niezaimplementowane — 2026-11-09.  
+> **Status:** R0 audyt; R1 wdrożony, pełna regresja i porównanie PDF MF pending; R2 QR KOD I wdrożony jako opt-in (testy celowane PASS, pełna regresja pending); R3–R4 niezaimplementowane — 2026-11-09.  
 > **Repozytorium:** `KrzysztofOle/render-doc`, gałąź `main`.  
 > **Cel:** czytelna wizualizacja faktury FA(3) możliwie zbliżona do wizualizacji MF/KSeF, zawierająca prawidłowy QR i link weryfikacyjny, do wykorzystania przez `ksef-optima-connector`.  
 > **Granice:** ten dokument nie wdraża kodu, nie publikuje wydania i nie daje zgody na SQL DML, import do Optimy, operacje KSeF ani użycie sekretów.
@@ -14,6 +14,20 @@ Kolejne ograniczone zadanie to **R1 — opt-in szablon `ksef`**, po zatwierdzeni
 ## Status R1 — implementacja 2026-11-09
 
 **R1_CODE_PUBLISHED / FULL_SUITE_NOT_RUN / MF_PDF_VISUAL_NOT_VERIFIED.** Dodano opt-in `template="ksef"` do publicznego API i CLI, samowystarczalny szablon HTML/CSS A4 oraz 16 testów (10 jednostkowych wykonano z PASS; 6 integracyjnych oczekuje na pełny checkout). `default` i `classic` nie zostały zmienione. Chromium potwierdził demonstracyjny wydruk 1- i 4-stronicowy, ale **brak** bezpośredniego porównania PDF MF ↔ HTML na tych samych XML. QR nie wchodzi w R1. Raport i kryteria domknięcia: [R1 QA](audyt_r1_ksef_template_20261109_PL.md).
+
+## Status R2 — implementacja 2026-11-09
+
+**R2_CODE_PUBLISHED / TARGETED_QA_PASS / FULL_SUITE_NOT_RUN.**
+Dodano publiczną, jawną `KsefVerification(environment, ksef_number)` i opcjonalny
+parametr `verification` w `render_fa3_html(..., template="ksef")`.
+Generowany jest lokalny URL i PNG KOD I, osadzony inline w HTML, z numerem
+KSeF, linkiem i oznaczeniem TEST/DEMO. SHA-256 liczone jest z **oryginalnych
+bajtów XML przekazanych do renderera**. QR nie jest generowany przy braku metadanych,
+bez zmiany `default`/`classic`. Kod KOD II pozostaje poza zakresem.
+Przeprowadzono 28 celowanych testów (w tym 10 R1), a syntetyczny QR
+odczytano skanerem z PNG i wydruku PDF A4 (1 strona). Integracyjne testy
+z pełnym checkoutem wymagają wykonania przed oznaczeniem całości jako
+`FULL_QA_PASS`. Szczegóły: [raport R2](audyt_r2_kod_i_20261109_PL.md).
 
 ## 1. Stan potwierdzony na 2026-11-09
 
@@ -97,4 +111,4 @@ Dwa kody dotyczą m.in. faktury offline **przed** przesłaniem do KSeF: KOD I z 
 
 Przed każdą implementacją sprawdzać bieżący `HEAD`, `AGENTS.md` (jeśli ma treść), publiczne API, istniejący CLI, `tests/test_renderer.py` i 5 przykładów `classic`. Nie tworzyć duplikatów narzędzi. CODEX wykonuje mały etap, testuje proporcjonalnie, raportuje zmienione pliki, wyniki, ograniczenia oraz lokalny commit. Push, tag i Release wymagają osobnej zgody; nie zmieniać zależności w connectorze w zadaniu `render-doc`. Każde rozszerzenie publicznego API, integracji i obsługi sekretów uzgodnić wcześniej.
 
-**Kolejna kontrola:** pełne testy integracyjne R1 oraz wizualne porównanie MF ↔ HTML na identycznych syntetycznych XML. **Kolejny etap funkcjonalny:** R2 — prawidłowy QR KOD I, po domknięciu QA R1; bez zmiany Optimy i zależności connectora w tej publikacji.
+**Kolejna kontrola:** pełna regresja R1+R2, integracyjne testy z prawdziwym parserem i wizualne porównanie MF ↔ HTML na identycznych syntetycznych XML. **Kolejny etap po kontroli:** R3 — osobna integracja w connectorze z dowodem oryginalnych bajtów i pochodzenia numeru KSeF; bez automatycznego zapisu do Optimy.

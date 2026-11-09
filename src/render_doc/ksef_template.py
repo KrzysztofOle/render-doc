@@ -2,11 +2,11 @@
 
 Features (EN):
 - Presents the existing validated FA(3) data model in a standalone A4 layout.
-- Keeps QR generation and official-verification links outside the R1 scope.
+- Accepts an optional local QR KOD I panel without changing legacy HTML.
 
 Funkcje (PL):
 - Prezentuje istniejący, zwalidowany model FA(3) w samodzielnym układzie A4.
-- Nie generuje kodów QR ani linków weryfikacyjnych na etapie R1.
+- W R2 może dołączyć lokalnie wygenerowany QR KOD I i link MF.
 
 File: src/render_doc/ksef_template.py
 """
@@ -133,8 +133,21 @@ td { font-size: 10px; }
               gap: 12px; margin: 13px 0 7px; font-size: 12px; }
 .amount-due strong { font-size: 17px; white-space: nowrap; color: #202830; }
 .payments td:first-child, .extra td:first-child { width: 35%; font-weight: 700; }
+/* R2: self-contained, printable KSeF KOD I section. */
+.verification { border-top: 1px solid #c3c7cc; padding-top: 9px; }
+.verification-grid { display: flex; gap: 20px; align-items: flex-start; }
+.verification-qr { text-align: center; flex: 0 0 40mm; min-width: 0; }
+.qr-image { display: block; width: 36mm; height: 36mm; margin: 0 auto;
+            image-rendering: pixelated; }
+.qr-label { font-weight: 700; font-size: 9px; overflow-wrap: anywhere; padding-top: 6px; }
+.verification-info { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.verification-info p { margin-bottom: 8px; }
+.verification-info a { display: block; color: #174a8b; overflow-wrap: anywhere; }
+.verification-hint { font-size: 9px; color: #657078; margin-top: 11px; }
+.verification-environment { color: #a3192d; font-weight: 700; }
 .paper-footer { border-top: 1px solid #afb6bc; padding-top: 6px;
                 color: #657078; font-size: 9px; margin-top: 20px; }
+.verification + .paper-footer { margin-top: 8px; }
 @page { size: A4; margin: 12mm;
         @bottom-right { content: counter(page) " / " counter(pages); color: #657078;
                         font: 9pt Arial, Helvetica, sans-serif; } }
@@ -142,7 +155,7 @@ td { font-size: 10px; }
   html, body { width: auto; max-width: none; margin: 0; padding: 0; }
   thead { display: table-header-group; }
   tr { break-inside: avoid; page-break-inside: avoid; }
-  .document-header, .parties, .details, .amount-due, .paper-footer {
+  .document-header, .parties, .details, .amount-due, .paper-footer, .verification {
     break-inside: avoid; page-break-inside: avoid; }
   .section { margin-top: 10px; }
 }
@@ -151,6 +164,7 @@ td { font-size: 10px; }
   .document-header { gap: 10px; }
   .invoice-meta { max-width: 60%; }
   .parties, .details { grid-template-columns: 1fr; }
+  .verification-grid { flex-direction: column; }
   .table-wrap { overflow-x: auto; }
   .items { min-width: 700px; }
 }
@@ -163,6 +177,8 @@ def render_ksef_template(
     summary: list[dict[str, str | None]],
     additional_descriptions: list[dict[str, str]],
     ksef_number: str | None,
+    *,
+    verification_panel: str = "",
 ) -> str:
     """Make an offline, KSeF-inspired HTML document from validated FA(3) data."""
     number = _e(data["number"])
@@ -291,6 +307,7 @@ def render_ksef_template(
         + tax
         + payment
         + extra
+        + verification_panel
         + footer
         + '</body></html>\n'
     )
