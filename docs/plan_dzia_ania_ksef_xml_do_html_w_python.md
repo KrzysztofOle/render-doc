@@ -5,6 +5,12 @@
 > **Cel:** czytelna wizualizacja faktury FA(3) możliwie zbliżona do wizualizacji MF/KSeF, zawierająca prawidłowy QR i link weryfikacyjny, do wykorzystania przez `ksef-optima-connector`.  
 > **Granice:** ten dokument nie wdraża kodu, nie publikuje wydania i nie daje zgody na SQL DML, import do Optimy, operacje KSeF ani użycie sekretów.
 
+## Status R0 — audyt wykonany 2026-11-09
+
+**R0_SOURCE_REVIEW_COMPLETE / VISUAL_PDF_NOT_VERIFIED.** Dokonano odczytowej analizy 5/5 istniejących par syntetycznych FA(3) XML/HTML, obu szablonów `default`/`classic` i kodu oficjalnego generatora PDF MF. Zapisano macierz 13 różnic, specyfikację A4 dla R1 i trzy referencyjne istniejące podglądy HTML. **Brak w tej sesji uruchomionego generatora PDF MF na tych samych XML oraz porównania obrazu A4; nie deklarować wizualnego PASS.** Szczegóły i źródła: [audyt R0](audyt_r0_porownanie_wizualizacji_fa3_mf_20261109_PL.md).
+
+Kolejne ograniczone zadanie to **R1 — opt-in szablon `ksef`**, po zatwierdzeniu zmiany publicznego API. Rzeczywiste porównanie PDF ↔ HTML na identycznych syntetycznych dokumentach jest obowiązkowym kryterium odbioru wizualnego R1. R2 (prawidłowy QR) pozostaje osobnym etapem.
+
 ## 1. Stan potwierdzony na 2026-11-09
 
 | Obszar | Fakty |
@@ -87,4 +93,4 @@ Dwa kody dotyczą m.in. faktury offline **przed** przesłaniem do KSeF: KOD I z 
 
 Przed każdą implementacją sprawdzać bieżący `HEAD`, `AGENTS.md` (jeśli ma treść), publiczne API, istniejący CLI, `tests/test_renderer.py` i 5 przykładów `classic`. Nie tworzyć duplikatów narzędzi. CODEX wykonuje mały etap, testuje proporcjonalnie, raportuje zmienione pliki, wyniki, ograniczenia oraz lokalny commit. Push, tag i Release wymagają osobnej zgody; nie zmieniać zależności w connectorze w zadaniu `render-doc`. Każde rozszerzenie publicznego API, integracji i obsługi sekretów uzgodnić wcześniej.
 
-**Kolejne zadanie do realizacji:** **R0 — porównanie `classic` z oficjalnym wizualnym wzorcem FA(3), na syntetycznych przykładach**, zakończone specyfikacją wyglądu, bez implementacji.
+**Kolejne zadanie do realizacji:** **R1 — odrębny opt-in szablon `ksef`** (po decyzji o rozszerzeniu API) z obowiązkowym porównaniem rzeczywistego PDF MF i HTML dla tych samych syntetycznych FA(3) przed deklaracją zgodności wizualnej. R2 — QR KOD I — po R1.
