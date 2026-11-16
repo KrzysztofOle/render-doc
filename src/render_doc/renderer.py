@@ -18,6 +18,7 @@ from datetime import date
 from decimal import Decimal
 from html import escape
 from io import BytesIO
+from importlib.metadata import PackageNotFoundError, version as package_version
 import re
 
 from lxml import etree
@@ -413,6 +414,40 @@ def _e(value: str) -> str:
     return escape(value, quote=True)
 
 
+def _rendering_metadata(template: str) -> str:
+    """Build the shared technical note for an HTML invoice preview."""
+    try:
+        version = package_version("render-doc")
+    except PackageNotFoundError:
+        from render_doc import __version__
+
+        version = __version__
+    return (
+        '<footer class="render-doc-technical" aria-label="Informacja techniczna">'
+        f"Podgląd wygenerowano przez: render-doc {_e(version)}<br>"
+        f"Szablon: {_e(template)}<br>"
+        "Struktura dokumentu: KSeF FA(3)<br>"
+        "Informacja techniczna — nie stanowi części faktury."
+        "</footer>"
+    )
+
+
+def _add_rendering_metadata(html: str, template: str) -> str:
+    """Append shared technical metadata and its screen/print styling."""
+    style = (
+        "<style>.render-doc-technical { margin: 10px 0 0; padding: 5px 0 0; "
+        "border-top: 1px solid #d4d8dc; color: #687078; font-size: 9px; "
+        "line-height: 1.35; overflow-wrap: anywhere; } "
+        "@media print { .render-doc-technical { font-size: 8pt; "
+        "break-inside: avoid; page-break-inside: avoid; } }</style>"
+    )
+    if "</head>" not in html or "</body>" not in html:
+        raise RuntimeError("Generated invoice HTML is missing a document boundary.")
+    return html.replace("</head>", style + "</head>", 1).replace(
+        "</body>", _rendering_metadata(template) + "</body>", 1
+    )
+
+
 def _format_pl_number(value: str) -> str:
     """Format a validated source decimal for Polish display without rounding."""
     number = Decimal(value)
@@ -548,12 +583,18 @@ def render_fa3_html(
     if template == "ksef":
         effective_number = verification.ksef_number if verification is not None else ksef_number
         panel = _verification_panel(xml_bytes, data, verification) if verification is not None else ""
-        return render_ksef_template(
-            data, rows, summary, additional_descriptions,
-            effective_number, verification_panel=panel,
+        return _add_rendering_metadata(
+            render_ksef_template(
+                data, rows, summary, additional_descriptions,
+                effective_number, verification_panel=panel,
+            ),
+            template,
         )
     if template == "classic":
-        return _render_classic_html(data, rows, summary, additional_descriptions, ksef_number)
+        return _add_rendering_metadata(
+            _render_classic_html(data, rows, summary, additional_descriptions, ksef_number),
+            template,
+        )
     line_html = "\n".join(
         "<tr>"
         f"<td>{_e(row['number'])}</td>"
@@ -615,7 +656,7 @@ def render_fa3_html(
         if data["payment_due_date"]
         else ""
     )
-    return f"""<!doctype html>
+    html = f"""<!doctype html>
 <html lang="pl">
 <head>
 <meta charset="utf-8">
@@ -647,3 +688,4 @@ th {{ background: #eef2f5; }}
 </body>
 </html>
 """
+    return _add_rendering_metadata(html, template)

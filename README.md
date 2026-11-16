@@ -92,10 +92,12 @@ Numer pochodzi od wywołującego; renderer nie odczytuje go z XML ani nie
 komunikuje się z KSeF.
 
 Wygląd można jawnie wybrać przez `template="classic"` albo `template="ksef"`.
-`default` (wartość domyślna) zachowuje dotychczasowy HTML. Szablon `classic`
-jest zwartym układem księgowym, a nowy `ksef` to osobny, zbliżony do MF
-układ wydruku A4 (nagłówek KSeF, tabele pozycji i VAT, płatności, dane
-kontrahentów). Nowy układ nie zmienia parsera ani walidacji FA(3).
+`default` jest wartością domyślną, `classic` to zwarty układ księgowy, a `ksef`
+to osobny, zbliżony do MF układ wydruku A4 (nagłówek KSeF, tabele pozycji i VAT,
+płatności, dane kontrahentów). Każdy podgląd zawiera pod treścią faktury
+techniczną stopkę z wersją pakietu `render-doc`, faktycznie użytym szablonem i
+strukturą wejściową `KSeF FA(3)`. Stopka jest widoczna w HTML i na wydruku,
+nie należy do faktury i nie zmienia parsera, walidacji ani obliczeń.
 Kolumna brutto według stawki jest informacyjną sumą netto i VAT z XML
 (dla stawki 0% i zw równa netto); należność ogółem pochodzi z `P_15`.
 Szablon `ksef` może wygenerować lokalnie QR **KOD I** i klikalny URL,
@@ -129,8 +131,8 @@ w HTML jako PNG `data:image/png;base64`, bez JavaScript i pobierania obrazów.
 Dopuszczalny link HTTPS otwiera się tylko po kliknięciu lub zeskanowaniu.
 **Wygenerowanie QR nie oznacza, że KSeF potwierdził dokument.**
 Bez `KsefVerification` także `template="ksef"` zachowuje wariant bez QR.
-`default` i `classic` nie mogą otrzymać `verification` i nie zmieniają
-swojego dotychczasowego HTML.
+`default` i `classic` nie mogą otrzymać `verification`. Informacja techniczna
+o szablonie jest wyświetlana również wtedy, gdy podgląd `ksef` nie zawiera QR.
 
 Nie deklaruje zgodności 1:1 z PDF MF lub `DKF_Html` Optimy.
 

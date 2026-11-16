@@ -93,6 +93,29 @@ def test_legacy_call_matches_explicit_none(invoice_xml: bytes) -> None:
     )
 
 
+@pytest.mark.parametrize("template", ["default", "classic", "ksef"])
+def test_preview_identifies_renderer_version_template_and_fa3(
+    invoice_xml: bytes, template: str
+) -> None:
+    from importlib.metadata import PackageNotFoundError, version
+
+    from render_doc import __version__
+
+    try:
+        expected_version = version("render-doc")
+    except PackageNotFoundError:
+        expected_version = __version__
+    html = render_fa3_html(invoice_xml, template=template)
+    assert f"Podgląd wygenerowano przez: render-doc {expected_version}" in html
+    assert f"Szablon: {template}" in html
+    assert "Struktura dokumentu: KSeF FA(3)" in html
+    assert "Informacja techniczna — nie stanowi części faktury." in html
+    assert ".render-doc-technical" in html
+    assert "@media print" in html
+    assert "break-inside: avoid" in html
+    assert "FV/1/2026" in html
+
+
 def test_classic_template_preserves_legacy_default_and_is_deterministic(invoice_xml: bytes) -> None:
     legacy = render_fa3_html(invoice_xml)
     assert legacy == render_fa3_html(invoice_xml, template="default")
