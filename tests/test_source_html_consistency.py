@@ -13,18 +13,18 @@ File: tests/test_source_html_consistency.py
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from html.parser import HTMLParser
 from pathlib import Path
-import re
+from typing import ClassVar
 from xml.etree import ElementTree
 
 import pytest
 
 from render_doc import UnsupportedDocumentError, render_fa3_html
-
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "docs" / "examples" / "classic"
 NAMESPACE = "http://crd.gov.pl/wzor/2025/06/25/13775/"
@@ -87,9 +87,21 @@ class _Node:
 class _DocumentParser(HTMLParser):
     """Build the small HTML tree needed to assert semantic data placement."""
 
-    _VOID = {
-        "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
-        "meta", "param", "source", "track", "wbr",
+    _VOID: ClassVar[set[str]] = {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
     }
 
     def __init__(self) -> None:
@@ -125,12 +137,15 @@ def _parse_html(html: str) -> _Node:
 
 def _class_nodes(root: _Node, class_name: str) -> list[_Node]:
     return [
-        node for node in root.descendants()
+        node
+        for node in root.descendants()
         if class_name in (node.attrs.get("class") or "").split()
     ]
 
 
-def _source_text(parent: ElementTree.Element, path: str, *, required: bool = True) -> str:
+def _source_text(
+    parent: ElementTree.Element, path: str, *, required: bool = True
+) -> str:
     node = parent.find(path, NS)
     if node is None or node.text is None:
         assert not required, f"Brak oczekiwanego źródłowego pola {path}"
@@ -155,11 +170,20 @@ def _assert_party(
     assert party is not None
     identity = party.find("fa:DaneIdentyfikacyjne", NS)
     assert identity is not None
-    cards = [node for node in _class_nodes(root, "party-card") if node.first("h2").text == label]
+    cards = [
+        node
+        for node in _class_nodes(root, "party-card")
+        if node.first("h2").text == label
+    ]
     assert len(cards) == 1
     card = cards[0]
-    assert _class_nodes(card, "party-name")[0].text == _source_text(identity, "fa:Nazwa")
-    assert _class_nodes(card, "party-nip")[0].text == f"NIP: {_source_text(identity, 'fa:NIP')}"
+    assert _class_nodes(card, "party-name")[0].text == _source_text(
+        identity, "fa:Nazwa"
+    )
+    assert (
+        _class_nodes(card, "party-nip")[0].text
+        == f"NIP: {_source_text(identity, 'fa:NIP')}"
+    )
     addresses = party.findall("fa:Adres", NS)
     expected_address = []
     for address in addresses:
@@ -167,7 +191,9 @@ def _assert_party(
             value = _source_text(address, f"fa:{field_name}", required=False)
             if value:
                 expected_address.append(value)
-    assert [node.text for node in _class_nodes(card, "party-address")] == expected_address
+    assert [
+        node.text for node in _class_nodes(card, "party-address")
+    ] == expected_address
 
 
 def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> None:
@@ -177,7 +203,9 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
     invoice = source.find("fa:Fa", NS)
     assert invoice is not None
 
-    assert _class_nodes(root, "invoice-number")[0].text == _source_text(invoice, "fa:P_2")
+    assert _class_nodes(root, "invoice-number")[0].text == _source_text(
+        invoice, "fa:P_2"
+    )
     details = _class_nodes(root, "details")
     assert len(details) == 1
     detail_values = {
@@ -185,7 +213,9 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
         for child in details[0].descendants("div")
         if len(child.descendants("span")) >= 2
     }
-    assert detail_values["Data wystawienia"] == _pl_date(_source_text(invoice, "fa:P_1"))
+    assert detail_values["Data wystawienia"] == _pl_date(
+        _source_text(invoice, "fa:P_1")
+    )
     assert detail_values["Waluta"] == _source_text(invoice, "fa:KodWaluty")
     delivery_date = _source_text(invoice, "fa:P_6", required=False)
     assert detail_values.get("Data dostawy lub wykonania usługi", "") == (
@@ -223,11 +253,17 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
         if not net:
             assert source_rate not in seen_rates
             continue
-        tax = _source_text(invoice, f"fa:{tax_field}", required=False) if tax_field else ""
+        tax = (
+            _source_text(invoice, f"fa:{tax_field}", required=False)
+            if tax_field
+            else ""
+        )
         summaries.append((label, _pl_number(net), _pl_number(tax) if tax else "—"))
     summary_tables = _class_nodes(root, "vat-summary")
     assert len(summary_tables) == 1
-    summary_rows = [row for row in summary_tables[0].descendants("tr") if row.descendants("td")]
+    summary_rows = [
+        row for row in summary_tables[0].descendants("tr") if row.descendants("td")
+    ]
     assert len(summary_rows) == len(summaries)
     for row, expected in zip(summary_rows, summaries, strict=True):
         cells = row.descendants("td")
@@ -250,7 +286,9 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
             payment_expected.append(("Termin płatności", _pl_date(term.text.strip())))
         form = payment.find("fa:FormaPlatnosci", NS)
         if form is not None and form.text:
-            payment_expected.append(("Forma płatności", PAYMENT_FORMS[form.text.strip()]))
+            payment_expected.append(
+                ("Forma płatności", PAYMENT_FORMS[form.text.strip()])
+            )
         account = payment.find("fa:RachunekBankowy/fa:NrRB", NS)
         if account is not None and account.text:
             payment_expected.append(("Rachunek bankowy", account.text.strip()))
@@ -345,7 +383,9 @@ def test_detects_changed_exempt_sales_in_vat_summary() -> None:
         )
 
 
-def _assert_mutation_rejected(xml_bytes: bytes, html: str, original: str, changed: str) -> None:
+def _assert_mutation_rejected(
+    xml_bytes: bytes, html: str, original: str, changed: str
+) -> None:
     assert html.count(original) == 1
     with pytest.raises(AssertionError):
         assert_supported_source_matches_ksef_html(
@@ -381,16 +421,22 @@ def test_detects_wrong_vat_amount_in_vat_summary() -> None:
 def test_detects_missing_invoice_row() -> None:
     xml_bytes = (EXAMPLES / f"{EXAMPLE_NAMES[2]}.xml").read_bytes()
     html = render_fa3_html(xml_bytes, template="ksef")
-    row = re.search(r"<tr>(?:(?!</tr>).)*Wdrozenie systemu etap pierwszy(?:(?!</tr>).)*</tr>", html)
+    row = re.search(
+        r"<tr>(?:(?!</tr>).)*Wdrozenie systemu etap pierwszy(?:(?!</tr>).)*</tr>", html
+    )
     assert row is not None
     with pytest.raises(AssertionError):
-        assert_supported_source_matches_ksef_html(xml_bytes, html.replace(row.group(0), "", 1))
+        assert_supported_source_matches_ksef_html(
+            xml_bytes, html.replace(row.group(0), "", 1)
+        )
 
 
 def test_detects_substituted_invoice_row_amount() -> None:
     xml_bytes = (EXAMPLES / f"{EXAMPLE_NAMES[2]}.xml").read_bytes()
     html = render_fa3_html(xml_bytes, template="ksef")
-    row = re.search(r"<tr>(?:(?!</tr>).)*Wdrozenie systemu etap pierwszy(?:(?!</tr>).)*</tr>", html)
+    row = re.search(
+        r"<tr>(?:(?!</tr>).)*Wdrozenie systemu etap pierwszy(?:(?!</tr>).)*</tr>", html
+    )
     assert row is not None
     changed_row = row.group(0).replace(">125,00</td>", ">126,00</td>", 1)
     assert changed_row != row.group(0)
@@ -406,7 +452,9 @@ def test_detects_missing_source_bank_account() -> None:
     account = "00001234567890123456789012"
     assert account in html
     with pytest.raises(AssertionError):
-        assert_supported_source_matches_ksef_html(xml_bytes, html.replace(account, "", 1))
+        assert_supported_source_matches_ksef_html(
+            xml_bytes, html.replace(account, "", 1)
+        )
 
 
 def test_detects_data_assigned_to_wrong_party_section() -> None:
