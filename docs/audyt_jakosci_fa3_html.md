@@ -57,3 +57,69 @@ Nie wykryto w tym audycie cichego pomijania całych pozycji ani nieobsługiwanyc
 - CLI `render-doc input.xml --output output.html` na pliku tymczasowym — kod 0; wynik identyczny z API.
 - Otworzenie HTML i sprawdzenie wyglądu w Safari — **NOT VERIFIED** z powodu oczekujących uprawnień narzędzia.
 - Zgodnie z zakresem nie zmieniano kodu ani testów; fixture i wygenerowane pliki pozostawały tymczasowe.
+
+## Automatyczne porównanie źródła z HTML (2026-11-20)
+
+Dodano wewnętrzną kontrolę pytest `tests/test_source_html_consistency.py` dla
+szablonu `ksef`. Oczekiwane dane są niezależnie odczytywane z oryginalnych
+fixture XML przez `xml.etree.ElementTree`, a HTML parsowany do prostego drzewa
+testowego. Porównanie jest strukturalne: kontroluje właściwą kartę sprzedawcy
+i nabywcy, tabelę wszystkich pozycji, tabelę sum stawek VAT, sekcję płatności
+i rachunku oraz tabelę dodatkowych opisów. Entitie HTML są dekodowane przez
+parser; format dat i dziesiętnych porównywany jest dokładnie, bez zmiany
+wartości źródłowych i bez przeliczania kwot.
+
+Automatycznie porównywane są: numer faktury; daty wystawienia i dostawy;
+waluta; nazwy, NIP-y i adresy sprzedawcy/nabywcy we właściwych kartach; dla
+każdej pozycji numer wiersza, opis, ilość, jednostka, cena jednostkowa netto,
+stawka VAT i wartość netto; źródłowe podstawy i kwoty VAT per stawka; `P_15`
+jako należność ogółem; termin, forma i rachunek płatności; wszystkie ogólne
+`DodatkowyOpis`. Wartości są porównywane w sekcjach/tabelach właściwych dla
+danych, nie jako swobodny tekst całego dokumentu. Daty i formatowanie
+dziesiętne są sprawdzane dokładnie, z zachowaniem polskich znaków i dekodowaniem
+encji HTML.
+
+Pięć syntetycznych fixture'ów obejmuje jedną pozycję 23%, stawki mieszane
+23%/8%, wiele pozycji z długimi nazwami, przelew z terminem/formą/rachunkiem
+oraz warianty 0% krajowe/WDT/eksport. Dla sum sprawdzane są źródłowe podstawy
+i kwoty VAT per stawka oraz `P_15`; informacyjna kolumna brutto per stawka nie
+jest rekonstruowana jako wartość źródłowa. Pięć fixture'ów nie zawiera 5% ani
+`zw`; te stawki są objęte oddzielnymi testami rendererowymi, ale nie tą
+niezależną macierzą XML → HTML.
+
+Fixture'y zawierają tylko jawnie nieaktywne oznaczenia `Adnotacje`, które
+istniejący renderer waliduje i celowo nie prezentuje. Aktywne oznaczenia,
+rabaty i nieobsługiwane dane dodatkowe nie należą do tej macierzy; renderer ma
+je odrzucić zamiast częściowo wyrenderować.
+
+Testy negatywne modyfikują wynik HTML i potwierdzają wykrycie zmienionego NIP-u,
+NIP-u przypisanego do złej karty, błędnej sumy VAT, brakującej pozycji,
+podmienionej wartości pozycji i usuniętego rachunku. Osobny przypadek potwierdza
+odrzucenie rodzaju faktury KOR zamiast częściowego renderu. Istniejące testy
+`test_renderer.py` i `test_ksef_template.py` nadal pokrywają punktowe mapowania,
+escaping, bezpieczeństwo zasobów, deterministyczność oraz inne odmowy; nowy QA
+uzupełnia je o porównanie end-to-end XML → sekcja HTML.
+
+Kontrola celowana i regresja istniejących testów renderera/szablonu:
+`112 passed` (`tests/test_source_html_consistency.py`, `tests/test_renderer.py`,
+`tests/test_ksef_template.py`). Pełny lokalny zestaw repozytorium: `137 passed, 1 skipped`;
+pominięty test wizualny wymaga opcjonalnych `cv2`/`numpy`. Repozytorium connectora i jego
+walidator `DKF_Html` nie były zmieniane.
+
+Uruchomienie:
+
+```sh
+python -m pytest -q tests/test_source_html_consistency.py
+```
+
+Zakres jest ograniczony do pięciu fixture'ów, danych obecnych w tych XML-ach i
+zdefiniowanych asercji. To nie waliduje XSD ani wszystkich możliwych FA(3), nie
+jest oceną wizualną i nie dowodzi zgodności bajtowej/semantycznej z Comarch lub
+MF. Korekty, zaliczki i inne nieobsługiwane struktury nadal muszą być odrzucone.
+Wynik nie kwalifikuje `DKF_Html` do zapisu ani nie zmienia `ContractValidator`.
+
+Wcześniejsze uwagi audytu o pomijaniu `NrWierszaFa` i pustym separatorze
+opcjonalnej jednostki są nieaktualne względem bieżącego kodu: obecny szablon
+pokazuje numer źródłowego wiersza i zastępuje brak jednostki kreską; pokrywa to
+istniejący `test_ksef_template.py`. Pozostałe zastrzeżenia wizualne z audytu
+pozostają bez zmian.

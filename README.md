@@ -176,6 +176,22 @@ prawdziwych faktur:
 python -m pytest -q
 ```
 
+Test `tests/test_source_html_consistency.py` niezależnie odczytuje oczekiwane
+wartości z oryginalnych XML pięciu przykładów i porównuje je z właściwymi
+sekcjami szablonu `ksef`: stronami, każdą pozycją, podsumowaniem stawek,
+płatnościami/rachunkami i dodatkowymi opisami. Obejmuje również mutacje NIP-u,
+VAT, pozycji, rachunku i przypisania do strony oraz odrzucenie typu spoza
+obsługiwanego profilu. Uruchom celowaną kontrolę poleceniem:
+
+```sh
+python -m pytest -q tests/test_source_html_consistency.py
+```
+
+PASS dotyczy pięciu wersjonowanych syntetycznych fixture'ów i wskazanych
+asercji; nie jest walidacją XSD ani dowodem kompletności dla wszystkich
+faktur FA(3). Korekty, zaliczki i pozostałe nieobsługiwane struktury nadal są
+odrzucane. Kontrola treści HTML nie kwalifikuje pola `DKF_Html` w Optimie.
+
 ## Źródła i licencje
 
 Mapowanie pól oparto na [oficjalnej broszurze FA(3) Ministerstwa Finansów](https://ksef.podatki.gov.pl/media/jknpcymf/broszura-informacyjna-dotyczaca-struktury-logicznej-fa-3-04032026.pdf).
