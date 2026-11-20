@@ -79,13 +79,15 @@ danych, nie jako swobodny tekst całego dokumentu. Daty i formatowanie
 dziesiętne są sprawdzane dokładnie, z zachowaniem polskich znaków i dekodowaniem
 encji HTML.
 
-Pięć syntetycznych fixture'ów obejmuje jedną pozycję 23%, stawki mieszane
-23%/8%, wiele pozycji z długimi nazwami, przelew z terminem/formą/rachunkiem
-oraz warianty 0% krajowe/WDT/eksport. Dla sum sprawdzane są źródłowe podstawy
-i kwoty VAT per stawka oraz `P_15`; informacyjna kolumna brutto per stawka nie
-jest rekonstruowana jako wartość źródłowa. Pięć fixture'ów nie zawiera 5% ani
-`zw`; te stawki są objęte oddzielnymi testami rendererowymi, ale nie tą
-niezależną macierzą XML → HTML.
+Pięć wersjonowanych syntetycznych fixture'ów obejmuje jedną pozycję 23%,
+stawki mieszane 23%/8%, wiele pozycji z długimi nazwami, przelew z
+terminem/formą/rachunkiem oraz warianty 0% krajowe/WDT/eksport. Testy
+niezależnej macierzy dodatkowo adaptują w pamięci fixture jednopozycyjny do
+5% (`P_12`, `P_13_3`, `P_14_3`) oraz `zw` (`P_12`, `P_13_7`), bez tworzenia
+nowych fixture'ów. Dla sum sprawdzane są źródłowe podstawy i kwoty VAT per
+stawka, sprzedaż zwolniona oraz `P_15`; dla kategorii bez sumarycznego VAT
+sprawdzane jest oznaczenie „—”, bez fikcyjnej kwoty 0,00. Informacyjna kolumna
+brutto per stawkę nie jest rekonstruowana jako wartość źródłowa.
 
 Fixture'y zawierają tylko jawnie nieaktywne oznaczenia `Adnotacje`, które
 istniejący renderer waliduje i celowo nie prezentuje. Aktywne oznaczenia,
@@ -93,27 +95,34 @@ rabaty i nieobsługiwane dane dodatkowe nie należą do tej macierzy; renderer m
 je odrzucić zamiast częściowo wyrenderować.
 
 Testy negatywne modyfikują wynik HTML i potwierdzają wykrycie zmienionego NIP-u,
-NIP-u przypisanego do złej karty, błędnej sumy VAT, brakującej pozycji,
-podmienionej wartości pozycji i usuniętego rachunku. Osobny przypadek potwierdza
-odrzucenie rodzaju faktury KOR zamiast częściowego renderu. Istniejące testy
+rzeczywistej zamiany kompletnej zawartości kart sprzedawcy i nabywcy przy
+zachowaniu etykiet i wszystkich wartości dokumentu, błędnych sum VAT 23% i 5%,
+zmienionej wartości sprzedaży zwolnionej, brakującej pozycji, podmienionej
+wartości pozycji i usuniętego rachunku. Osobny przypadek potwierdza odrzucenie
+rodzaju faktury KOR zamiast częściowego renderu. Istniejące testy
 `test_renderer.py` i `test_ksef_template.py` nadal pokrywają punktowe mapowania,
 escaping, bezpieczeństwo zasobów, deterministyczność oraz inne odmowy; nowy QA
 uzupełnia je o porównanie end-to-end XML → sekcja HTML.
 
-Kontrola celowana i regresja istniejących testów renderera/szablonu:
-`112 passed` (`tests/test_source_html_consistency.py`, `tests/test_renderer.py`,
-`tests/test_ksef_template.py`). Pełny lokalny zestaw repozytorium: `137 passed, 1 skipped`;
-pominięty test wizualny wymaga opcjonalnych `cv2`/`numpy`. Repozytorium connectora i jego
+Weryfikacja rozszerzenia (2026-11-20): `tests/test_source_html_consistency.py`
+— `16 passed`; pełny lokalny zestaw render-doc — `141 passed, 1 skipped`.
+Pominięty test wizualny wymaga opcjonalnych `cv2`/`numpy`. `ruff check` z
+pominięciem zastanych naruszeń `I001` i `RUF012` przechodzi. Pełny lint nadal
+zgłasza te dwa naruszenia w niezmienionych wcześniejszych liniach pliku;
+`ruff format --check` również wskazuje zastane formatowanie poza dodanym
+fragmentem. `pip check` nie wykrył problemów zależności, a import pakietu i
+zależności runtime zakończył się powodzeniem. Repozytorium connectora i jego
 walidator `DKF_Html` nie były zmieniane.
 
 Uruchomienie:
 
 ```sh
-python -m pytest -q tests/test_source_html_consistency.py
+py -3.12 -m pytest -q tests/test_source_html_consistency.py
 ```
 
-Zakres jest ograniczony do pięciu fixture'ów, danych obecnych w tych XML-ach i
-zdefiniowanych asercji. To nie waliduje XSD ani wszystkich możliwych FA(3), nie
+Zakres jest ograniczony do pięciu fixture'ów, dwóch wariantów syntetycznie
+adaptowanych w pamięci oraz danych i pól objętych asercjami. To nie waliduje
+XSD ani wszystkich możliwych FA(3), nie
 jest oceną wizualną i nie dowodzi zgodności bajtowej/semantycznej z Comarch lub
 MF. Korekty, zaliczki i inne nieobsługiwane struktury nadal muszą być odrzucone.
 Wynik nie kwalifikuje `DKF_Html` do zapisu ani nie zmienia `ContractValidator`.

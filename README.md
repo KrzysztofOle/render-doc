@@ -179,9 +179,15 @@ python -m pytest -q
 Test `tests/test_source_html_consistency.py` niezależnie odczytuje oczekiwane
 wartości z oryginalnych XML pięciu przykładów i porównuje je z właściwymi
 sekcjami szablonu `ksef`: stronami, każdą pozycją, podsumowaniem stawek,
-płatnościami/rachunkami i dodatkowymi opisami. Obejmuje również mutacje NIP-u,
-VAT, pozycji, rachunku i przypisania do strony oraz odrzucenie typu spoza
-obsługiwanego profilu. Uruchom celowaną kontrolę poleceniem:
+płatnościami/rachunkami i dodatkowymi opisami. Dodatkowo adaptuje istniejący
+jednopozycyjny XML w pamięci do wariantu 5% i `zw`; nie dodaje nowych fixture’ów.
+Sprawdza `P_12`, wszystkie pola pozycji, podstawę i kwotę VAT z `P_13_3`/
+`P_14_3`, sprzedaż zwolnioną z `P_13_7`, `P_15` oraz właściwe wiersze
+podsumowania bez fikcyjnego VAT dla `zw`. Testy mutacyjne wykrywają zmianę obu
+kwot, zmianę wartości sprzedaży zwolnionej, zamianę kompletnych danych stron,
+zmiany NIP-u i pozycji, brak rachunku oraz typ spoza obsługiwanego profilu.
+Jest to porównanie wybranych pól z właściwymi sekcjami HTML, a nie pełna
+walidacja FA(3). Uruchom celowaną kontrolę poleceniem:
 
 ```sh
 python -m pytest -q tests/test_source_html_consistency.py

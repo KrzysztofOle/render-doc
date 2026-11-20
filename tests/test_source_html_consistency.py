@@ -284,6 +284,67 @@ def test_ksef_html_preserves_accounting_fields_by_source_section(name: str) -> N
     assert_supported_source_matches_ksef_html(xml_bytes, html)
 
 
+def _example_with_rate(rate: str) -> bytes:
+    """Adapt the existing one-row fixture to a supported VAT category."""
+    xml_bytes = (EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml").read_bytes()
+    if rate == "5":
+        return xml_bytes.replace(
+            b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1><P_15>123.00</P_15>",
+            b"<P_13_3>100.00</P_13_3><P_14_3>5.00</P_14_3><P_15>105.00</P_15>",
+        ).replace(b"<P_12>23</P_12>", b"<P_12>5</P_12>")
+    if rate == "zw":
+        return xml_bytes.replace(
+            b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1><P_15>123.00</P_15>",
+            b"<P_13_7>100.00</P_13_7><P_15>100.00</P_15>",
+        ).replace(b"<P_12>23</P_12>", b"<P_12>zw</P_12>")
+    raise AssertionError(f"Unsupported test rate: {rate}")
+
+
+@pytest.mark.parametrize("rate", ("5", "zw"))
+def test_ksef_html_preserves_supported_special_rate_by_source(rate: str) -> None:
+    xml_bytes = _example_with_rate(rate)
+    html = render_fa3_html(xml_bytes, template="ksef")
+    assert_supported_source_matches_ksef_html(xml_bytes, html)
+
+
+def test_detects_changed_vat_5_amount_in_vat_summary() -> None:
+    xml_bytes = _example_with_rate("5")
+    html = render_fa3_html(xml_bytes, template="ksef")
+    table = re.search(r'(<table class="vat-summary">.*?</table>)', html, re.DOTALL)
+    assert table is not None
+    changed, count = re.subn(
+        r'(<tbody>.*?<td class="number">)5,00(</td>)',
+        r"\g<1>6,00\g<2>",
+        table.group(0),
+        count=1,
+        flags=re.DOTALL,
+    )
+    assert count == 1
+    with pytest.raises(AssertionError):
+        assert_supported_source_matches_ksef_html(
+            xml_bytes, html.replace(table.group(0), changed, 1)
+        )
+
+
+def test_detects_changed_exempt_sales_in_vat_summary() -> None:
+    xml_bytes = _example_with_rate("zw")
+    html = render_fa3_html(xml_bytes, template="ksef")
+    table = re.search(r'(<table class="vat-summary">.*?</table>)', html, re.DOTALL)
+    assert table is not None
+    changed, count = re.subn(
+        r'(<tbody>.*?<td class="number">)100,00(</td>)',
+        r"\g<1>101,00\g<2>",
+        table.group(0),
+        count=1,
+        flags=re.DOTALL,
+    )
+    assert count == 1
+    with pytest.raises(AssertionError):
+        assert_supported_source_matches_ksef_html(
+            xml_bytes, html.replace(table.group(0), changed, 1)
+        )
+
+
 def _assert_mutation_rejected(xml_bytes: bytes, html: str, original: str, changed: str) -> None:
     assert html.count(original) == 1
     with pytest.raises(AssertionError):
@@ -351,7 +412,20 @@ def test_detects_missing_source_bank_account() -> None:
 def test_detects_data_assigned_to_wrong_party_section() -> None:
     xml_bytes = (EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml").read_bytes()
     html = render_fa3_html(xml_bytes, template="ksef")
-    _assert_mutation_rejected(xml_bytes, html, "0000000000", "0000000001")
+    cards = re.findall(
+        r'(<div class="party-card"><h2>(?:Sprzedawca|Nabywca)</h2>)(.*?)(</div>)',
+        html,
+        re.DOTALL,
+    )
+    assert len(cards) == 2
+    seller, buyer = cards
+    assert "0000000000" in seller[1] and "0000000001" in buyer[1]
+    swapped_html = html.replace(
+        "".join(seller), "".join((seller[0], buyer[1], seller[2])), 1
+    ).replace("".join(buyer), "".join((buyer[0], seller[1], buyer[2])), 1)
+    assert "0000000000" in swapped_html and "0000000001" in swapped_html
+    with pytest.raises(AssertionError):
+        assert_supported_source_matches_ksef_html(xml_bytes, swapped_html)
 
 
 def test_rejects_unsupported_invoice_type_instead_of_partial_render() -> None:
