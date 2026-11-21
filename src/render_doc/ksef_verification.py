@@ -84,7 +84,10 @@ def _verification_panel(
 
     seller = data["seller"]
     if not isinstance(seller, str):
-        raise ValueError("Seller identity is missing from parsed FA(3).")
+        # Invalid parsed invoice identity keeps the established ValueError contract.
+        raise ValueError(  # noqa: TRY004
+            "Seller identity is missing from parsed FA(3)."
+        )
     _, separator, suffix = seller.rpartition(" (NIP: ")
     if not separator or not suffix.endswith(")"):
         raise ValueError("Seller NIP is missing from parsed FA(3).")

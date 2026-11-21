@@ -118,9 +118,7 @@ verification = KsefVerification(
     environment="DEMO",
     ksef_number="0000000000-20261109-SYNTHETIC",  # tylko przykład!
 )
-html = render_fa3_html(
-    original_xml, template="ksef", verification=verification
-)
+html = render_fa3_html(original_xml, template="ksef", verification=verification)
 Path("podglad-z-qr.html").write_text(html, encoding="utf-8")
 ```
 

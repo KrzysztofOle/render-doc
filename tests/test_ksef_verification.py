@@ -187,6 +187,14 @@ def test_qr_identical_on_repetition_and_escapes_by_construction(data):
 def test_qr_missing_or_invalid_identity_fails_closed(data):
     with pytest.raises(TypeError):
         _verification_panel(b"abc", data, "DEMO")
+    data["seller"] = None
+    with pytest.raises(
+        ValueError,
+        match=r"Seller identity is missing from parsed FA\(3\)\.",
+    ):
+        _verification_panel(
+            b"abc", data, KsefVerification("DEMO", "1234567890-20261109-SYNTHETIC")
+        )
     data["seller"] = "Seller (NIP: <script>)"
     with pytest.raises(ValueError, match="NIP"):
         _verification_panel(
