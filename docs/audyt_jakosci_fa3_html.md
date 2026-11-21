@@ -140,3 +140,45 @@ opcjonalnej jednostki są nieaktualne względem bieżącego kodu: obecny szablon
 pokazuje numer źródłowego wiersza i zastępuje brak jednostki kreską; pokrywa to
 istniejący `test_ksef_template.py`. Pozostałe zastrzeżenia wizualne z audytu
 pozostają bez zmian.
+
+## RENDER-DOC-OFFLINE-QUALIFY-01 (2026-11-21)
+
+- **Werdykt:** `QUALIFIED_OFFLINE` dla wskazanego, ograniczonego profilu i
+  syntetycznych scenariuszy poniżej.
+- **Środowisko:** Windows 11, Python 3.12.10, Ruff 0.17.6.
+- **Kod:** `main`, HEAD `9b891d6e6c227e299721382563d2022230a8bf88`.
+- **Metoda:** produkcyjne CLI `python -m render_doc.cli` wygenerowało
+  `ksef` HTML z lokalnych syntetycznych XML. Prywatny CLI QA otrzymywał
+  zapisaną parę ścieżek XML/HTML. Celowa mutacja HTML zakończyła się FAIL,
+  co potwierdza sprawdzanie dostarczonego pliku, a nie same ponowne
+  renderowanie XML. Pliki i mutacje znajdowały się wyłącznie w katalogu
+  tymczasowym, usuniętym po eksperymencie.
+
+| Scenariusz | Oczekiwany status / kod | Wynik |
+|---|---|---|
+| CLI renderera: 23%, 8%/stawki mieszane, 5%, 0 KR/WDT/EX, `zw`, wiele pozycji | HTML wygenerowany / 0 | PASS dla wszystkich sześciu uruchomień |
+| QA poprawnej pary 23% | `PASS SOURCE_FIELDS_MATCH` / 0 | PASS |
+| QA zmienionej kwoty VAT | `FAIL HTML_MISMATCH` / 1 | PASS |
+| QA usuniętej daty wystawienia | `FAIL HTML_MISMATCH` / 1 | PASS |
+| QA typu faktury KOR | `UNSUPPORTED PROFILE_UNSUPPORTED` / 2 | PASS |
+| QA 8%/stawki mieszane, 5%, 0 KR/WDT/EX, `zw`, wiele pozycji | `PASS SOURCE_FIELDS_MATCH` / 0 | PASS dla wszystkich pięciu par |
+| QA uszkodzonego XML | `FAIL XML_INVALID` / 1 | PASS |
+| QA brakującego pliku XML | `FAIL INPUT_READ_ERROR` / 1 | PASS |
+| QA niezgodnego HTML i brakującego pola | `FAIL HTML_MISMATCH` / 1 | PASS dla obu przypadków |
+
+Łącznie wykonano 19 uruchomień procesów: 6 produkcyjnego CLI renderera i 13
+prywatnego CLI QA. We wszystkich kontrolowano kod zakończenia oraz stdout i
+stderr; otrzymano oczekiwane komunikaty statusu, puste stderr i brak tracebacku.
+Komunikaty CLI nie zawierały wartości dokumentów. Dla VAT 5% i `zw` XML
+powstał w pamięci z istniejącego helpera testowego, a do eksperymentu zapisano
+wyłącznie kopię tymczasową.
+
+**Regresja:** Ruff check i format — PASS; pełne pytest — 164 PASS, 0 FAIL,
+1 SKIP; `pip check` i `git diff --check` — PASS. Pominięty test
+`tests/test_ksef_verification.py:118` wymaga opcjonalnego `cv2`, którego nie
+ma w środowisku; nie instalowano tej zależności. Repozytorium nie otrzymało
+zmian kodu, API, szablonów ani QR; dopisano wyłącznie ten raport.
+
+**Ograniczenia:** wynik dotyczy lokalnego Windows, aktualnego checkoutu i
+syntetycznych przykładów. Nie jest walidacją XSD ani pełnej FA(3), kontrolą
+wizualną, kwalifikacją QR ani dowodem zachowania dla wszystkich dokumentów.
