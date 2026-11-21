@@ -196,6 +196,23 @@ asercji; nie jest walidacją XSD ani dowodem kompletności dla wszystkich
 faktur FA(3). Korekty, zaliczki i pozostałe nieobsługiwane struktury nadal są
 odrzucane. Kontrola treści HTML nie kwalifikuje pola `DKF_Html` w Optimie.
 
+Pojedynczą lokalną parę można sprawdzić prywatnym narzędziem QA z katalogu
+repozytorium (PowerShell i inne powłoki używają tej samej składni):
+
+```sh
+python tests/test_source_html_consistency.py --xml faktura.xml --html faktura.html
+```
+
+`PASS SOURCE_FIELDS_MATCH` oznacza zgodność pól objętych asercjami i
+obsługiwany profil render-doc. `FAIL` oznacza błąd odczytu/XML albo
+niezgodność HTML; `UNSUPPORTED` oznacza profil lub wariant odrzucony przez
+renderer. Kody przyczyn są krótkie i nie zawierają danych z dokumentu.
+Narzędzie czyta oba pliki lokalnie, nie zapisuje raportów ani kopii, nie łączy
+się z usługami i nie ujawnia wartości faktury w komunikatach. Jest to prywatny
+mechanizm QA w testach, nie publiczne API ani komenda pakietu. Kontrola nie
+waliduje XSD, QR, autentyczności dokumentu ani kompletności całej FA(3); używaj
+wyłącznie dokumentów, do których masz prawo dostępu.
+
 ## Źródła i licencje
 
 Mapowanie pól oparto na [oficjalnej broszurze FA(3) Ministerstwa Finansów](https://ksef.podatki.gov.pl/media/jknpcymf/broszura-informacyjna-dotyczaca-struktury-logicznej-fa-3-04032026.pdf).

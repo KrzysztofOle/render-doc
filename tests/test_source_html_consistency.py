@@ -13,7 +13,10 @@ File: tests/test_source_html_consistency.py
 
 from __future__ import annotations
 
+import argparse
 import re
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -24,7 +27,15 @@ from xml.etree import ElementTree
 
 import pytest
 
-from render_doc import UnsupportedDocumentError, render_fa3_html
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from render_doc import (
+    InvalidXmlError,
+    UnsupportedDocumentError,
+    render_fa3_html,
+)
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "docs" / "examples" / "classic"
 NAMESPACE = "http://crd.gov.pl/wzor/2025/06/25/13775/"
@@ -108,6 +119,7 @@ class _DocumentParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.root = _Node("#document", {})
         self.stack = [self.root]
+        self.malformed = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         node = _Node(tag, dict(attrs), self.stack[-1])
@@ -121,8 +133,11 @@ class _DocumentParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         for index in range(len(self.stack) - 1, 0, -1):
             if self.stack[index].tag == tag:
+                if index != len(self.stack) - 1:
+                    self.malformed = True
                 del self.stack[index:]
                 return
+        self.malformed = True
 
     def handle_data(self, data: str) -> None:
         self.stack[-1].children.append(data)
@@ -132,6 +147,7 @@ def _parse_html(html: str) -> _Node:
     parser = _DocumentParser()
     parser.feed(html)
     parser.close()
+    assert not parser.malformed and len(parser.stack) == 1
     return parser.root
 
 
@@ -315,6 +331,43 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
         assert not extra_tables
 
 
+def _check_pair(xml_path: Path, html_path: Path) -> tuple[str, str]:
+    """Return a safe status and reason code for one local document pair."""
+    try:
+        xml_bytes = xml_path.read_bytes()
+        html = html_path.read_text(encoding="utf-8")
+    except OSError:
+        return "FAIL", "INPUT_READ_ERROR"
+    except UnicodeError:
+        return "FAIL", "HTML_ENCODING_ERROR"
+
+    try:
+        # Reuse production profile qualification, while comparing only against
+        # independently extracted source values and the caller's HTML.
+        render_fa3_html(xml_bytes, template="ksef")
+    except UnsupportedDocumentError:
+        return "UNSUPPORTED", "PROFILE_UNSUPPORTED"
+    except InvalidXmlError:
+        return "FAIL", "XML_INVALID"
+    try:
+        assert_supported_source_matches_ksef_html(xml_bytes, html)
+    except (AssertionError, ElementTree.ParseError, IndexError):
+        return "FAIL", "HTML_MISMATCH"
+    return "PASS", "SOURCE_FIELDS_MATCH"
+
+
+def _offline_main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Prywatna, lokalna kontrola pary XML FA(3) i HTML ksef."
+    )
+    parser.add_argument("--xml", required=True, type=Path)
+    parser.add_argument("--html", required=True, type=Path)
+    args = parser.parse_args()
+    status, reason = _check_pair(args.xml, args.html)
+    print(f"{status} {reason}")
+    return {"PASS": 0, "FAIL": 1, "UNSUPPORTED": 2}[status]
+
+
 @pytest.mark.parametrize("name", EXAMPLE_NAMES)
 def test_ksef_html_preserves_accounting_fields_by_source_section(name: str) -> None:
     xml_bytes = (EXAMPLES / f"{name}.xml").read_bytes()
@@ -484,3 +537,157 @@ def test_rejects_unsupported_invoice_type_instead_of_partial_render() -> None:
     )
     with pytest.raises(UnsupportedDocumentError):
         render_fa3_html(unsupported, template="ksef")
+
+
+@pytest.mark.parametrize(
+    ("name", "rate"),
+    [(name, None) for name in EXAMPLE_NAMES]
+    + [(EXAMPLE_NAMES[0], rate) for rate in ("5", "zw")],
+)
+def test_offline_pair_check_classifies_supported_examples(
+    tmp_path: Path, name: str, rate: str | None
+) -> None:
+    xml_bytes = (EXAMPLES / f"{name}.xml").read_bytes()
+    if rate is not None:
+        xml_bytes = _example_with_rate(rate)
+    xml_path = tmp_path / "source.xml"
+    html_path = tmp_path / "offline-pair.html"
+    xml_path.write_bytes(xml_bytes)
+    html_path.write_text(render_fa3_html(xml_bytes, template="ksef"), encoding="utf-8")
+    assert _check_pair(xml_path, html_path) == ("PASS", "SOURCE_FIELDS_MATCH")
+
+
+def test_offline_pair_check_fails_safely_for_changed_data(tmp_path: Path) -> None:
+    xml_bytes = (EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml").read_bytes()
+    html = render_fa3_html(xml_bytes, template="ksef").replace(
+        "0000000000", "9999999999", 1
+    )
+    xml_path = tmp_path / "synthetic.xml"
+    html_path = tmp_path / "synthetic.html"
+    xml_path.write_bytes(xml_bytes)
+    html_path.write_text(html, encoding="utf-8")
+    assert _check_pair(xml_path, html_path) == ("FAIL", "HTML_MISMATCH")
+
+
+@pytest.mark.parametrize(
+    ("name", "old", "new"),
+    (
+        (EXAMPLE_NAMES[0], "0000000000", "9999999999"),
+        (EXAMPLE_NAMES[0], "123,00 PLN", "124,00 PLN"),
+        (EXAMPLE_NAMES[3], "00001234567890123456789012", "00001234567890123456789013"),
+        (EXAMPLE_NAMES[0], "Standardowe", "Usunięto"),
+    ),
+)
+def test_offline_pair_check_rejects_mutated_html(
+    tmp_path: Path, name: str, old: str, new: str
+) -> None:
+    xml_bytes = (EXAMPLES / f"{name}.xml").read_bytes()
+    html = render_fa3_html(xml_bytes, template="ksef")
+    assert html.count(old) == 1
+    xml_path = tmp_path / "pair.xml"
+    html_path = tmp_path / "pair.html"
+    xml_path.write_bytes(xml_bytes)
+    html_path.write_text(html.replace(old, new, 1), encoding="utf-8")
+    assert _check_pair(xml_path, html_path) == ("FAIL", "HTML_MISMATCH")
+
+
+def test_offline_pair_check_classifies_invalid_and_missing_inputs(
+    tmp_path: Path,
+) -> None:
+    xml_path = tmp_path / "broken.xml"
+    html_path = tmp_path / "page.html"
+    xml_path.write_text("<broken", encoding="utf-8")
+    html_path.write_text("<html></html>", encoding="utf-8")
+    assert _check_pair(xml_path, html_path) == ("FAIL", "XML_INVALID")
+    assert _check_pair(tmp_path / "missing.xml", html_path) == (
+        "FAIL",
+        "INPUT_READ_ERROR",
+    )
+
+
+def test_offline_pair_check_rejects_malformed_html(tmp_path: Path) -> None:
+    xml_path = EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml"
+    html_path = tmp_path / "malformed.html"
+    html_path.write_text("<html><body></html>", encoding="utf-8")
+    assert _check_pair(xml_path, html_path) == ("FAIL", "HTML_MISMATCH")
+
+
+def test_offline_pair_check_classifies_unsupported_profile(tmp_path: Path) -> None:
+    xml_bytes = (
+        (EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml")
+        .read_bytes()
+        .replace(
+            b"<RodzajFaktury>VAT</RodzajFaktury>",
+            b"<RodzajFaktury>KOR</RodzajFaktury>",
+        )
+    )
+    xml_path = tmp_path / "unsupported.xml"
+    html_path = tmp_path / "page.html"
+    xml_path.write_bytes(xml_bytes)
+    html_path.write_text("<html></html>", encoding="utf-8")
+    assert _check_pair(xml_path, html_path) == (
+        "UNSUPPORTED",
+        "PROFILE_UNSUPPORTED",
+    )
+
+
+def test_offline_pair_check_classifies_unknown_field_as_unsupported(
+    tmp_path: Path,
+) -> None:
+    xml_bytes = (
+        (EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml")
+        .read_bytes()
+        .replace(b"</Fa>", b"<NieznanePole>synthetic</NieznanePole></Fa>")
+    )
+    xml_path = tmp_path / "unknown.xml"
+    html_path = tmp_path / "page.html"
+    xml_path.write_bytes(xml_bytes)
+    html_path.write_text("<html></html>", encoding="utf-8")
+    assert _check_pair(xml_path, html_path) == (
+        "UNSUPPORTED",
+        "PROFILE_UNSUPPORTED",
+    )
+
+
+def test_offline_cli_prints_only_safe_status(tmp_path: Path) -> None:
+    xml_path = EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml"
+    html_path = tmp_path / "rendered.html"
+    html_path.write_text(
+        render_fa3_html(xml_path.read_bytes(), template="ksef"), encoding="utf-8"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--xml",
+            str(xml_path),
+            "--html",
+            str(html_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "PASS SOURCE_FIELDS_MATCH"
+    assert not result.stderr
+
+    html_path.write_text(
+        html_path.read_text(encoding="utf-8").replace("0000000000", "9999999999", 1),
+        encoding="utf-8",
+    )
+    failed = subprocess.run(
+        result.args,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert failed.returncode == 1
+    assert failed.stdout.strip() == "FAIL HTML_MISMATCH"
+    assert not failed.stderr
+
+
+if __name__ == "__main__":
+    raise SystemExit(_offline_main())
