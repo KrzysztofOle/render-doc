@@ -1,5 +1,11 @@
 # Audyt jakości renderowania FA(3) XML → HTML
 
+> **Rozdział historyczny:** sekcje od „Mapowanie pól” do „Wykonane kontrole”
+> opisują audyt `render-doc 0.1.0` z 2026-10-14; są zachowane jako dowód
+> stanu ówczesnego, a nie aktualna lista błędów. Późniejsze zmiany i aktualny
+> zakres automatycznego QA opisano poniżej w „Automatyczne porównanie źródła
+> z HTML”. Bieżący zakres pakietu znajduje się w [README](../README.md).
+
 - **Data:** 2026-10-14
 - **Wersja:** render-doc 0.1.0
 - **Wynik:** **PARTIAL**
@@ -106,11 +112,13 @@ uzupełnia je o porównanie end-to-end XML → sekcja HTML.
 
 Weryfikacja rozszerzenia (2026-11-20): `tests/test_source_html_consistency.py`
 — `16 passed`; pełny lokalny zestaw render-doc — `141 passed, 1 skipped`.
-Pominięty test wizualny wymaga opcjonalnych `cv2`/`numpy`. `ruff check` z
-pominięciem zastanych naruszeń `I001` i `RUF012` przechodzi. Pełny lint nadal
-zgłasza te dwa naruszenia w niezmienionych wcześniejszych liniach pliku;
-`ruff format --check` również wskazuje zastane formatowanie poza dodanym
-fragmentem. `pip check` nie wykrył problemów zależności, a import pakietu i
+Pominięty test wizualny wymaga opcjonalnych `cv2`/`numpy`. W późniejszym
+`RENDER-DOC-QA-CLEANUP-01` (commit `4a80166`) uporządkowano importy, adnotację
+`ClassVar` i formatowanie `tests/test_source_html_consistency.py`.
+Według raportu lokalnego CODEX ten plik przechodzi Ruff lint i format, a
+repozytorium nadal ma 13 naruszeń lint i 8 plików wymagających
+formatowania; nie ma jeszcze niezależnego pełnego przebiegu PASS.
+`pip check` nie wykrył problemów zależności, a import pakietu i
 zależności runtime zakończył się powodzeniem. Repozytorium connectora i jego
 walidator `DKF_Html` nie były zmieniane.
 

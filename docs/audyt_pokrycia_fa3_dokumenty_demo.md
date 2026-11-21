@@ -1,5 +1,12 @@
 # Audyt pokrycia FA(3) na trzech dokumentach Receive
 
+> **Dowód historyczny:** poniższe obserwacje dotyczą stanu renderera
+> w chwili audytu. W szczególności wzmianki o odrzucaniu `P_6`,
+> nieaktywnych `Adnotacje` i ogólnych `DodatkowyOpis` nie opisują
+> aktualnego kodu; obsługa ich ograniczonych wariantów została później
+> dodana. Bieżący profil i ograniczenia są w [README](../README.md).
+> Nie zmieniono pierwotnych ustaleń z trzech dokumentów Receive.
+
 ## Cel i wynik
 
 Audyt określa najmniejszy zakres obsługi potrzebny do wyrenderowania trzech

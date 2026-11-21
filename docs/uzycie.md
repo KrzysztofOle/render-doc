@@ -1,5 +1,7 @@
 # Użycie render-doc
 
+> Aktualny, nadrzędny opis obsługiwanego profilu, szablonów i KOD I znajduje się w [README](../README.md). Ta instrukcja podaje skrót użycia; dokumenty audytowe mają charakter historyczny.
+
 ## Publiczne API
 
 ```python
@@ -11,10 +13,10 @@ html = render_fa3_html(Path("faktura.xml").read_bytes())
 Path("faktura.html").write_text(html, encoding="utf-8")
 ```
 
-Wybór zwartego szablonu księgowego jest jawny: `render_fa3_html(xml_bytes,
-template="classic")`. Pominięcie parametru lub `template="default"` zachowuje
-dotychczasowy wygląd. Wartość `template` jest prezentacyjna i nie zmienia
-parsowania ani walidacji FA(3).
+Dostępne szablony to `default`, `classic` (zwarty układ księgowy) i `ksef`
+(układ A4 z opcjonalnym KOD I). Wybór szablonu jest jawny, np.
+`render_fa3_html(xml_bytes, template="ksef")`. Pominięcie parametru
+zachowuje `default`. Wybór szablonu nie zmienia parsowania ani walidacji FA(3).
 
 Numer KSeF jest opcjonalnym metadatum od wywołującego. Przykład używa
 syntetycznej wartości testowej, a nie rzeczywistego numeru:
@@ -29,7 +31,12 @@ html = render_fa3_html(
 ```
 
 Pomijając `ksef_number`, zachowujesz dotychczasowe zachowanie API. Renderer nie
-wyprowadza numeru z XML i nie komunikuje się z KSeF.
+wyprowadza numeru z XML i nie komunikuje się z KSeF. Dla szablonu `ksef`
+można jawnie przekazać `KsefVerification(environment, ksef_number)` wraz
+z **oryginalnymi, niezmienionymi bajtami XML z potwierdzonego odbioru**.
+Wtedy HTML zawiera lokalnie wygenerowany KOD I i link weryfikacyjny.
+Wygenerowany QR sam w sobie nie dowodzi obecności dokumentu w KSeF;
+szczegóły i bezpieczny przykład podaje [README](../README.md#api).
 
 Funkcja przyjmuje `bytes` i zwraca kompletny dokument HTML w `str`. Błędny
 XML powoduje `InvalidXmlError`; poprawny składniowo dokument spoza obsługiwanego
@@ -44,7 +51,7 @@ Po instalacji pakietu:
 render-doc faktura.xml --output faktura.html --template classic
 ```
 
-`--template` przyjmuje `default` lub `classic` i domyślnie wybiera `default`.
+`--template` przyjmuje `default`, `classic` albo `ksef` i domyślnie wybiera `default`.
 Polecenie czyta lokalny plik, wywołuje publiczne API i zapisuje wynik UTF-8.
 Kod zakończenia `0` oznacza powodzenie, `2` błąd odczytu, zapisu, parsowania
 lub nieobsługiwany dokument.
@@ -73,8 +80,7 @@ wpisy z `NrWiersza` pozostają nieobsługiwane.
 W `Platnosc` obsługiwany jest tylko jeden `TerminPlatnosci` z dokładnie jednym
 `Termin`; `TerminOpis`, wiele terminów i pozostałe warianty płatności są
 odrzucane. Opcjonalne `FormaPlatnosci` może wystąpić po terminie, wyłącznie
-z kodem od `1` do `7`; renderer pokazuje wtedy jej nazwę. Po terminie i formie
-po terminie i opcjonalnej formie może wystąpić jeden `RachunekBankowy`
+z kodem od `1` do `7`; renderer pokazuje wtedy jej nazwę. Po terminie i opcjonalnej formie może wystąpić jeden `RachunekBankowy`
 zawierający wyłącznie wymagane `NrRB`;
 numer jest prezentowany w sekcji płatności. Dodatkowe pola rachunku oraz inne
 kolejności są odrzucane.
@@ -89,9 +95,24 @@ stawkę powoduje `UnsupportedDocumentError`. Renderer nie przelicza ani nie
 sumuje kwot, a pozostałe elementy i warianty odrzuca. Nie waliduje pełnej
 zgodności z XSD FA(3).
 
-HTML zawiera wyłącznie wbudowany CSS, bez JavaScriptu, fontów, obrazów ani
-odwołań do zewnętrznych zasobów. Zgodność z Optimą, w szczególności z
-`CDN.DokumentyKSeF.DKF_Html`, wymaga osobnego testu w Optimie.
+HTML jest samowystarczalny: zawiera wbudowany CSS, nie uruchamia JavaScriptu
+i nie pobiera zewnętrznych zasobów. W szablonie `ksef` z potwierdzonym
+kontekstem `KsefVerification` może zawierać osadzony obraz PNG KOD I
+oraz klikalny link HTTPS służący do weryfikacji. Zgodność funkcjonalna
+z Optimą, w szczególności z `CDN.DokumentyKSeF.DKF_Html`,
+wymaga osobnego, ograniczonego dowodu.
+
+## Automatyczna kontrola XML → HTML
+
+Istniejąca kontrola `tests/test_source_html_consistency.py` porównuje
+wartości z oryginalnych syntetycznych XML z właściwymi sekcjami HTML
+szablonu `ksef`, w tym warianty 5% i `zw`, oraz wykrywa celowe mutacje.
+Jest to **kontrola w testach**, nie produkcyjne CLI do weryfikacji dowolnej
+faktury ani pełna walidacja FA(3). Zob. [audyt zakresu QA](audyt_jakosci_fa3_html.md).
+
+```sh
+python -m pytest -q tests/test_source_html_consistency.py
+```
 
 ## Testy offline
 
