@@ -48,7 +48,7 @@ def _identity(value: object) -> tuple[str, str]:
 
 def _party_card(heading: str, identity: object, address: object) -> str:
     name, nip = _identity(identity)
-    lines = "".join(f"<p class=\"party-address\">{_e(line)}</p>" for line in address)
+    lines = "".join(f'<p class="party-address">{_e(line)}</p>' for line in address)
     return (
         '<div class="party-card">'
         f"<h2>{_e(heading)}</h2>"
@@ -67,7 +67,11 @@ def _gross_by_rate(entry: dict[str, str | None]) -> str:
         return "—"
     if tax is None:
         # The restricted parser accepts missing tax only for 0% or exempt sales.
-        return _pl_decimal(net) if entry["rate"] in ("0 KR", "0 WDT", "0 EX", "zw") else "—"
+        return (
+            _pl_decimal(net)
+            if entry["rate"] in ("0 KR", "0 WDT", "0 EX", "zw")
+            else "—"
+        )
     precision = max(
         0,
         -Decimal(net).as_tuple().exponent,
@@ -221,13 +225,13 @@ def render_ksef_template(
         + "</div></section>"
     )
     line_rows = "".join(
-        '<tr>'
+        "<tr>"
         f'<td class="line-index">{_e(row["number"])}</td>'
         f'<td class="description">{_e(row["description"])}</td>'
         f'<td class="number">{_e(_pl_decimal(row["quantity"]))}</td>'
-        f'<td>{_e(row["unit"]) if row["unit"] else "—"}</td>'
+        f"<td>{_e(row['unit']) if row['unit'] else '—'}</td>"
         f'<td class="number">{_e(_pl_decimal(row["unit_net"]))}</td>'
-        f'<td>{_e(row["tax_rate"])}</td>'
+        f"<td>{_e(row['tax_rate'])}</td>"
         f'<td class="number">{_e(_pl_decimal(row["net"]))}</td>'
         "</tr>"
         for row in rows
@@ -242,8 +246,8 @@ def render_ksef_template(
         f"<tbody>{line_rows}</tbody></table></div></section>"
     )
     vat_rows = "".join(
-        '<tr>'
-        f'<td>{_e(item["rate"] or "")}</td>'
+        "<tr>"
+        f"<td>{_e(item['rate'] or '')}</td>"
         f'<td class="number">{_e(_pl_decimal(item["net"])) if item["net"] is not None else "—"}</td>'
         f'<td class="number">{_e(_pl_decimal(item["vat"])) if item["vat"] is not None else "—"}</td>'
         f'<td class="number">{_e(_gross_by_rate(item))}</td>'
@@ -256,14 +260,14 @@ def render_ksef_template(
         '<thead><tr><th class="col-rate">Stawka</th>'
         '<th class="col-net number">Netto</th><th class="col-vat number">VAT</th>'
         '<th class="col-gross number">Brutto*</th></tr></thead>'
-        f'<tbody>{vat_rows}</tbody></table></div>'
+        f"<tbody>{vat_rows}</tbody></table></div>"
         '<p class="footnote" style="font-size:9px">'
-        '* Brutto według stawki obliczono informacyjnie z wartości netto i VAT z XML; '
-        'dla stawek 0% i zw jest równe netto. Suma do zapłaty pochodzi bezpośrednio z P_15.'
-        '</p>'
+        "* Brutto według stawki obliczono informacyjnie z wartości netto i VAT z XML; "
+        "dla stawek 0% i zw jest równe netto. Suma do zapłaty pochodzi bezpośrednio z P_15."
+        "</p>"
         '<div class="amount-due"><span>Kwota należności ogółem:</span>'
-        f'<strong>{_e(_pl_decimal(str(data["gross"])))} {currency}</strong></div>'
-        '</section>'
+        f"<strong>{_e(_pl_decimal(str(data['gross'])))} {currency}</strong></div>"
+        "</section>"
     )
     payment_fields = (
         ("Termin płatności", "payment_due_date"),
@@ -282,7 +286,7 @@ def render_ksef_template(
         else ""
     )
     extra_rows = "".join(
-        f'<tr><td>{_e(item["key"])}</td><td>{_e(item["value"])}</td></tr>'
+        f"<tr><td>{_e(item['key'])}</td><td>{_e(item['value'])}</td></tr>"
         for item in additional_descriptions
     )
     extra = (
@@ -293,13 +297,13 @@ def render_ksef_template(
     )
     footer = (
         '<footer class="paper-footer">Podgląd danych faktury ustrukturyzowanej FA(3). '
-        'Sam podgląd nie potwierdza autentyczności faktury w KSeF.'
-        '</footer>'
+        "Sam podgląd nie potwierdza autentyczności faktury w KSeF."
+        "</footer>"
     )
     return (
         '<!doctype html>\n<html lang="pl"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f'<title>Faktura {number}</title><style>{_CSS}</style></head><body>'
+        f"<title>Faktura {number}</title><style>{_CSS}</style></head><body>"
         + header
         + parties
         + details
@@ -309,5 +313,5 @@ def render_ksef_template(
         + extra
         + verification_panel
         + footer
-        + '</body></html>\n'
+        + "</body></html>\n"
     )

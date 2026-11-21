@@ -74,15 +74,35 @@ class _Links(HTMLParser):
 def test_ksef_template_contains_accounting_fields_and_is_a4(
     invoice_data, invoice_rows, vat_summary
 ) -> None:
-    result = _render(invoice_data, invoice_rows, vat_summary,
-                     [{"key": "Zamówienie", "value": "XYZ/12"}], "SYNTHETIC-KSEF-NUMBER")
+    result = _render(
+        invoice_data,
+        invoice_rows,
+        vat_summary,
+        [{"key": "Zamówienie", "value": "XYZ/12"}],
+        "SYNTHETIC-KSEF-NUMBER",
+    )
     for expected in (
-        "<!doctype html>", "lang=\"pl\"", "Krajowy System e-Faktur",
-        "SYN/2026/001", "14.10.2026", "Numer KSeF:",
-        "Przykładowy Sprzedawca Sp. z o.o.", "NIP:", "0000000000",
-        "Testowy Nabywca", "Usługa testowa", "100,00", "23,00",
-        "123,00", "PLN", "Przelew", "14.11.2026", "Rachunek bankowy",
-        "Zamówienie", "XYZ/12", "@page { size: A4",
+        "<!doctype html>",
+        'lang="pl"',
+        "Krajowy System e-Faktur",
+        "SYN/2026/001",
+        "14.10.2026",
+        "Numer KSeF:",
+        "Przykładowy Sprzedawca Sp. z o.o.",
+        "NIP:",
+        "0000000000",
+        "Testowy Nabywca",
+        "Usługa testowa",
+        "100,00",
+        "23,00",
+        "123,00",
+        "PLN",
+        "Przelew",
+        "14.11.2026",
+        "Rachunek bankowy",
+        "Zamówienie",
+        "XYZ/12",
+        "@page { size: A4",
         "thead { display: table-header-group; }",
     ):
         assert expected in result
@@ -106,15 +126,22 @@ def test_untrusted_content_is_escaped_and_no_external_resources(
 ) -> None:
     invoice_data["number"] = '<img src="https://bad.invalid/x" onerror="alert(1)">'
     invoice_rows[0]["description"] = "</td><script>alert(1)</script> & test"
-    result = _render(invoice_data, invoice_rows, vat_summary,
-                     [{"key": "x", "value": "<b>secret</b>"}], "<script>evil</script>")
+    result = _render(
+        invoice_data,
+        invoice_rows,
+        vat_summary,
+        [{"key": "x", "value": "<b>secret</b>"}],
+        "<script>evil</script>",
+    )
     assert "&lt;script&gt;" in result
     assert "&lt;img src=&quot;" in result
     assert "&lt;b&gt;secret&lt;/b&gt;" in result
     assert "<script" not in result and "<img" not in result
     parsed = _Links()
     parsed.feed(result)
-    assert not any(tag in ("script", "img", "iframe", "link") for tag, _ in parsed.attrs)
+    assert not any(
+        tag in ("script", "img", "iframe", "link") for tag, _ in parsed.attrs
+    )
     assert not any("src" in attrs or "href" in attrs for _, attrs in parsed.attrs)
 
 
@@ -135,7 +162,9 @@ def test_gross_uses_source_tax_sum_without_rounding(invoice_data, invoice_rows):
     assert "123,00" in result  # P_15 is not replaced by computed VAT gross.
 
 
-def test_empty_payment_and_extra_do_not_create_empty_tables(invoice_data, invoice_rows, vat_summary):
+def test_empty_payment_and_extra_do_not_create_empty_tables(
+    invoice_data, invoice_rows, vat_summary
+):
     invoice_data.update(payment_due_date="", payment_form="", bank_account="")
     result = _render(invoice_data, invoice_rows, vat_summary)
     assert '<table class="payments"' not in result
@@ -155,13 +184,16 @@ def test_long_invoice_rows_are_kept(invoice_data, invoice_rows, vat_summary):
     assert "break-inside: avoid" in result
 
 
-@pytest.mark.parametrize("name", [
-    "01-jedna-pozycja-vat-23",
-    "02-mieszane-stawki-vat",
-    "03-wiele-pozycji-dlugie-opisy-i-nazwy",
-    "04-przelew-termin-rachunek",
-    "05-warianty-vat-zero",
-])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "01-jedna-pozycja-vat-23",
+        "02-mieszane-stawki-vat",
+        "03-wiele-pozycji-dlugie-opisy-i-nazwy",
+        "04-przelew-termin-rachunek",
+        "05-warianty-vat-zero",
+    ],
+)
 def test_public_api_renders_existing_synthetic_examples(name):
     """Run against the actual parser only in the full render-doc checkout."""
     from render_doc import render_fa3_html
@@ -183,16 +215,17 @@ def test_public_api_renders_existing_synthetic_examples(name):
 
 def test_cli_supports_ksef_template(monkeypatch, tmp_path):
     """The CLI must expose the new template only as explicit opt-in."""
-    from render_doc.cli import main
     from render_doc import render_fa3_html
+    from render_doc.cli import main
 
     folder = Path(__file__).resolve().parents[1] / "docs/examples/classic"
     xml = (folder / "01-jedna-pozycja-vat-23.xml").read_bytes()
     source = tmp_path / "invoice.xml"
     target = tmp_path / "preview.html"
     source.write_bytes(xml)
-    monkeypatch.setattr("sys.argv", [
-        "render-doc", str(source), "--output", str(target), "--template", "ksef"
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        ["render-doc", str(source), "--output", str(target), "--template", "ksef"],
+    )
     assert main() == 0
     assert target.read_text(encoding="utf-8") == render_fa3_html(xml, template="ksef")

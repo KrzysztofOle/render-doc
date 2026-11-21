@@ -26,15 +26,18 @@ def main() -> int:
     parser.add_argument("input", type=Path, help="Lokalny plik XML FA(3)")
     parser.add_argument("--output", required=True, type=Path, help="Docelowy plik HTML")
     parser.add_argument(
-        "--template", choices=("default", "classic", "ksef"), default="default",
+        "--template",
+        choices=("default", "classic", "ksef"),
+        default="default",
         help="Szablon wyglądu (domyślnie: dotychczasowy)",
     )
     parser.add_argument(
         "--ksef-number", help="Potwierdzony numer KSeF (razem z --qr-environment)"
     )
     parser.add_argument(
-        "--qr-environment", choices=("TEST", "DEMO", "PROD"),
-        help="Środowisko QR KOD I (tylko szablon ksef i potwierdzony numer)"
+        "--qr-environment",
+        choices=("TEST", "DEMO", "PROD"),
+        help="Środowisko QR KOD I (tylko szablon ksef i potwierdzony numer)",
     )
     args = parser.parse_args()
     has_number = args.ksef_number is not None
@@ -46,7 +49,8 @@ def main() -> int:
     try:
         verification = (
             KsefVerification(args.qr_environment, args.ksef_number)
-            if has_number else None
+            if has_number
+            else None
         )
         html = render_fa3_html(
             args.input.read_bytes(), template=args.template, verification=verification

@@ -57,11 +57,11 @@ def invoice_xml() -> bytes:
     <DodatkowyOpis><Klucz>Warunki</Klucz><Wartosc>Standardowe</Wartosc></DodatkowyOpis>
     <RodzajFaktury>VAT</RodzajFaktury>
   </Fa>
-</Faktura>""".encode("utf-8")
+</Faktura>""".encode()
 
 
 def _with_payment(invoice_xml: bytes, payment_fields: str) -> bytes:
-    payment = f"<Platnosc>{payment_fields}</Platnosc>".encode("utf-8")
+    payment = f"<Platnosc>{payment_fields}</Platnosc>".encode()
     return invoice_xml.replace(b"</Fa>", payment + b"</Fa>")
 
 
@@ -116,28 +116,45 @@ def test_preview_identifies_renderer_version_template_and_fa3(
     assert "FV/1/2026" in html
 
 
-def test_classic_template_preserves_legacy_default_and_is_deterministic(invoice_xml: bytes) -> None:
+def test_classic_template_preserves_legacy_default_and_is_deterministic(
+    invoice_xml: bytes,
+) -> None:
     legacy = render_fa3_html(invoice_xml)
     assert legacy == render_fa3_html(invoice_xml, template="default")
-    classic = render_fa3_html(invoice_xml, template="classic", ksef_number="SYNTHETIC-12345678901234567890")
-    assert classic == render_fa3_html(invoice_xml, template="classic", ksef_number="SYNTHETIC-12345678901234567890")
-    assert 'font: 14px Arial' in classic
+    classic = render_fa3_html(
+        invoice_xml, template="classic", ksef_number="SYNTHETIC-12345678901234567890"
+    )
+    assert classic == render_fa3_html(
+        invoice_xml, template="classic", ksef_number="SYNTHETIC-12345678901234567890"
+    )
+    assert "font: 14px Arial" in classic
     assert "@page { size: A4; margin: 12mm; }" in classic
     assert "Numer KSeF:</strong> SYNTHETIC-12345678901234567890" in classic
     assert "Podsumowanie VAT" in classic and "Do zapłaty: 123,00 PLN" in classic
     assert "grid-template-columns" not in classic and "display: flex" not in classic
 
 
-def test_classic_template_cli_selection(invoice_xml: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_classic_template_cli_selection(
+    invoice_xml: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     source, output = tmp_path / "invoice.xml", tmp_path / "invoice.html"
     source.write_bytes(invoice_xml)
-    monkeypatch.setattr(sys, "argv", ["render-doc", str(source), "--output", str(output), "--template", "classic"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["render-doc", str(source), "--output", str(output), "--template", "classic"],
+    )
     assert main() == 0
-    assert output.read_text(encoding="utf-8") == render_fa3_html(invoice_xml, template="classic")
+    assert output.read_text(encoding="utf-8") == render_fa3_html(
+        invoice_xml, template="classic"
+    )
 
 
 def test_classic_template_escapes_untrusted_values(invoice_xml: bytes) -> None:
-    altered = invoice_xml.replace(b"<P_7>Us\xc5\x82uga &lt;hosting&gt;</P_7>", b"<P_7>&lt;script&gt;alert(1)&lt;/script&gt;</P_7>")
+    altered = invoice_xml.replace(
+        b"<P_7>Us\xc5\x82uga &lt;hosting&gt;</P_7>",
+        b"<P_7>&lt;script&gt;alert(1)&lt;/script&gt;</P_7>",
+    )
     html = render_fa3_html(altered, template="classic", ksef_number="<script>")
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "Numer KSeF:</strong> &lt;script&gt;" in html
@@ -154,8 +171,14 @@ def test_classic_template_handles_mixed_vat_and_long_values(invoice_xml: bytes) 
         b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1>",
         b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1>"
         b"<P_13_2>100.00</P_13_2><P_14_2>8.00</P_14_2>",
-    ).replace(b"<RodzajFaktury>VAT</RodzajFaktury>", second_row + b"<RodzajFaktury>VAT</RodzajFaktury>")
-    altered = altered.replace(b"<Nazwa>Nabywca</Nazwa>", b"<Nazwa>" + (b"Dlugie imie firmy " * 12) + b"</Nazwa>")
+    ).replace(
+        b"<RodzajFaktury>VAT</RodzajFaktury>",
+        second_row + b"<RodzajFaktury>VAT</RodzajFaktury>",
+    )
+    altered = altered.replace(
+        b"<Nazwa>Nabywca</Nazwa>",
+        b"<Nazwa>" + (b"Dlugie imie firmy " * 12) + b"</Nazwa>",
+    )
     html = render_fa3_html(altered, template="classic", ksef_number="KSEF-" + "9" * 100)
     assert "Opis pozycji " in html and "8%" in html and "23%" in html
     assert "Dlugie imie firmy" in html and "9" * 100 in html
@@ -199,9 +222,7 @@ def test_ksef_number_requires_text_or_none(invoice_xml: bytes) -> None:
 
 
 def test_renders_synthetic_ksef_number(invoice_xml: bytes) -> None:
-    html = render_fa3_html(
-        invoice_xml, ksef_number="5860000000-20261014-TEST"
-    )
+    html = render_fa3_html(invoice_xml, ksef_number="5860000000-20261014-TEST")
 
     assert (
         "<h2>Identyfikacja KSeF</h2><p><strong>Numer KSeF:</strong> "
@@ -292,7 +313,9 @@ def test_renders_exempt_sales_with_multiple_rates_and_bank_account(
 
     html = render_fa3_html(xml)
 
-    assert html.index("<td>1</td>") < html.index("<td>2</td>") < html.index("<td>3</td>")
+    assert (
+        html.index("<td>1</td>") < html.index("<td>2</td>") < html.index("<td>3</td>")
+    )
     assert "Zwolniona" in html
     assert "<td>zwolniona</td>" in html
     assert "Netto zwolniona</span><strong>40.00 PLN" in html
@@ -308,8 +331,10 @@ def test_renders_exempt_sales_with_multiple_rates_and_bank_account(
     [
         "<RachunekBankowy/>",
         "<RachunekBankowy><NrRB>1234567890</NrRB><SWIFT>ABC</SWIFT></RachunekBankowy>",
-        "<RachunekBankowy><NrRB>1234567890</NrRB></RachunekBankowy>"
-        "<RachunekBankowy><NrRB>0987654321</NrRB></RachunekBankowy>",
+        (
+            "<RachunekBankowy><NrRB>1234567890</NrRB></RachunekBankowy>"
+            "<RachunekBankowy><NrRB>0987654321</NrRB></RachunekBankowy>"
+        ),
     ],
 )
 def test_unsupported_bank_account_variants_are_rejected(
@@ -317,8 +342,7 @@ def test_unsupported_bank_account_variants_are_rejected(
 ) -> None:
     xml = _with_payment(
         invoice_xml,
-        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
-        + account_xml,
+        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>" + account_xml,
     )
 
     with pytest.raises(UnsupportedDocumentError):
@@ -326,15 +350,15 @@ def test_unsupported_bank_account_variants_are_rejected(
 
 
 @pytest.mark.parametrize("value", ["2026-02-30", "02.11.2026", "2026-1-02", ""])
-def test_invalid_payment_term_date_is_rejected(
-    invoice_xml: bytes, value: str
-) -> None:
+def test_invalid_payment_term_date_is_rejected(invoice_xml: bytes, value: str) -> None:
     xml = _with_payment(
         invoice_xml,
         f"<TerminPlatnosci><Termin>{value}</Termin></TerminPlatnosci>",
     )
 
-    with pytest.raises(UnsupportedDocumentError, match="Termin.*(prawidłowej daty|puste)"):
+    with pytest.raises(
+        UnsupportedDocumentError, match="Termin.*(prawidłowej daty|puste)"
+    ):
         render_fa3_html(xml)
 
 
@@ -342,16 +366,26 @@ def test_invalid_payment_term_date_is_rejected(
     "payment_fields",
     [
         "<Termin>2026-11-02</Termin>",
-        "<TerminPlatnosci><Termin>2026-11-02</Termin>"
-        "<TerminOpis><Ilosc>14</Ilosc></TerminOpis></TerminPlatnosci>",
-        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
-        "<TerminPlatnosci><Termin>2026-11-03</Termin></TerminPlatnosci>",
-        "<FormaPlatnosci>6</FormaPlatnosci>"
-        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>",
-        "<Zaplacono>1</Zaplacono>"
-        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>",
-        "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
-        "<FormaPlatnosci>8</FormaPlatnosci>",
+        (
+            "<TerminPlatnosci><Termin>2026-11-02</Termin>"
+            "<TerminOpis><Ilosc>14</Ilosc></TerminOpis></TerminPlatnosci>"
+        ),
+        (
+            "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+            "<TerminPlatnosci><Termin>2026-11-03</Termin></TerminPlatnosci>"
+        ),
+        (
+            "<FormaPlatnosci>6</FormaPlatnosci>"
+            "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        ),
+        (
+            "<Zaplacono>1</Zaplacono>"
+            "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+        ),
+        (
+            "<TerminPlatnosci><Termin>2026-11-02</Termin></TerminPlatnosci>"
+            "<FormaPlatnosci>8</FormaPlatnosci>"
+        ),
     ],
 )
 def test_unsupported_payment_variants_are_rejected(
@@ -587,9 +621,7 @@ def test_supported_rates_and_zero_rate_variants(
             summary += f"<{tax_field}>{source_rate}.00</{tax_field}>"
         altered = altered.replace(b"<P_15>", f"{summary}<P_15>".encode())
     html = render_fa3_html(altered)
-    html_with_number = render_fa3_html(
-        altered, ksef_number="SYNTHETIC-KSEF-001"
-    )
+    html_with_number = render_fa3_html(altered, ksef_number="SYNTHETIC-KSEF-001")
     assert label in html
     assert f"Netto {label}</span><strong>100.00 PLN" in html
     if source_rate.startswith("0 "):
@@ -622,7 +654,9 @@ def test_unsupported_rate_is_rejected(invoice_xml: bytes) -> None:
 def test_exempt_rate_requires_p13_7_summary(invoice_xml: bytes) -> None:
     xml = invoice_xml.replace(b"<P_12>23</P_12>", b"<P_12>zw</P_12>")
 
-    with pytest.raises(UnsupportedDocumentError, match="Brak wymaganych pól sumarycznych.*zwolniona"):
+    with pytest.raises(
+        UnsupportedDocumentError, match="Brak wymaganych pól sumarycznych.*zwolniona"
+    ):
         render_fa3_html(xml)
 
 

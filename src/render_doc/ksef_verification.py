@@ -6,17 +6,16 @@ No KSeF lookup or assertion of authenticity is made by this module.
 
 from __future__ import annotations
 
+import re
 from base64 import b64encode, urlsafe_b64encode
 from dataclasses import dataclass
 from datetime import date
 from hashlib import sha256
 from html import escape
 from io import BytesIO
-import re
 
 import qrcode
 from qrcode.constants import ERROR_CORRECT_M
-
 
 _ENVIRONMENTS = {
     "TEST": "https://qr-test.ksef.mf.gov.pl",
@@ -38,11 +37,18 @@ class KsefVerification:
     ksef_number: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.environment, str) or self.environment not in _ENVIRONMENTS:
+        if (
+            not isinstance(self.environment, str)
+            or self.environment not in _ENVIRONMENTS
+        ):
             raise ValueError("KSeF QR environment must be TEST, DEMO or PROD.")
-        if (not isinstance(self.ksef_number, str)
-                or re.fullmatch(r"[A-Za-z0-9-]{1,100}", self.ksef_number) is None):
-            raise ValueError("KSeF QR requires a non-empty, safe, caller-confirmed KSeF number.")
+        if (
+            not isinstance(self.ksef_number, str)
+            or re.fullmatch(r"[A-Za-z0-9-]{1,100}", self.ksef_number) is None
+        ):
+            raise ValueError(
+                "KSeF QR requires a non-empty, safe, caller-confirmed KSeF number."
+            )
 
 
 def _verification_url(
@@ -61,10 +67,11 @@ def _verification_url(
         raise ValueError("Invalid FA(3) issue date format for KSeF QR.")
     if environment not in _ENVIRONMENTS:
         raise ValueError("Unsupported KSeF QR environment.")
-    digest = urlsafe_b64encode(sha256(original_xml).digest()).rstrip(b"=").decode("ascii")
+    digest = (
+        urlsafe_b64encode(sha256(original_xml).digest()).rstrip(b"=").decode("ascii")
+    )
     return (
-        f"{_ENVIRONMENTS[environment]}/invoice/{seller_nip}/"
-        f"{issued:%d-%m-%Y}/{digest}"
+        f"{_ENVIRONMENTS[environment]}/invoice/{seller_nip}/{issued:%d-%m-%Y}/{digest}"
     )
 
 
@@ -109,17 +116,17 @@ def _verification_panel(
     return (
         '<section class="section verification" aria-label="Weryfikacja faktury w KSeF">'
         '<h2 class="section-title">Kod weryfikujący KSeF</h2>'
-        f'{env_label}'
+        f"{env_label}"
         '<div class="verification-grid">'
         '<div class="verification-qr">'
         f'<img class="qr-image" src="data:image/png;base64,{png}" '
         'alt="Kod QR KOD I do sprawdzenia faktury w KSeF">'
         f'<div class="qr-label">{safe_number}</div>'
-        '</div>'
+        "</div>"
         '<div class="verification-info">'
-        '<p>Zeskanuj kod lub otwórz link, aby sprawdzić fakturę w systemie KSeF.</p>'
+        "<p>Zeskanuj kod lub otwórz link, aby sprawdzić fakturę w systemie KSeF.</p>"
         f'<a href="{safe_url}" rel="noopener noreferrer">{safe_url}</a>'
         '<p class="verification-hint">Sam kod QR nie jest dowodem przyjęcia '
-        'faktury przez KSeF; numer musi pochodzić z potwierdzonego odbioru.</p>'
-        '</div></div></section>'
+        "faktury przez KSeF; numer musi pochodzić z potwierdzonego odbioru.</p>"
+        "</div></div></section>"
     )

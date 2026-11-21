@@ -14,14 +14,16 @@ File: src/render_doc/renderer.py
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal
 from html import escape
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from io import BytesIO
-from importlib.metadata import PackageNotFoundError, version as package_version
-import re
 
 from lxml import etree
+
 from render_doc.ksef_template import render_ksef_template
 from render_doc.ksef_verification import KsefVerification, _verification_panel
 
@@ -464,8 +466,8 @@ def _party_html(label: str, value: str, address: list[str]) -> str:
     nip_html = f'<p class="nip">NIP: {_e(nip[:-1])}</p>' if nip else ""
     address_html = "<br>".join(_e(line) for line in address)
     return (
-        f"<td><h2>{label}</h2><p class=\"party-name\">{_e(name)}</p>"
-        f"{nip_html}<p class=\"address\">{address_html}</p></td>"
+        f'<td><h2>{label}</h2><p class="party-name">{_e(name)}</p>'
+        f'{nip_html}<p class="address">{address_html}</p></td>'
     )
 
 
@@ -479,19 +481,19 @@ def _render_classic_html(
     """Render parsed invoice data with the compact accounting layout."""
     line_html = "\n".join(
         "<tr>"
-        f"<td class=\"number\">{_e(row['number'])}</td>"
+        f'<td class="number">{_e(row["number"])}</td>'
         f"<td>{_e(row['description'])}</td>"
-        f"<td class=\"number\">{_e(_format_pl_number(row['quantity']))} {_e(row['unit']) if row['unit'] else '—'}</td>"
-        f"<td class=\"number\">{_e(_format_pl_number(row['unit_net']))} {_e(data['currency'])}</td>"
-        f"<td class=\"number\">{_e(row['tax_rate'])}</td>"
-        f"<td class=\"number\">{_e(_format_pl_number(row['net']))} {_e(data['currency'])}</td>"
+        f'<td class="number">{_e(_format_pl_number(row["quantity"]))} {_e(row["unit"]) if row["unit"] else "—"}</td>'
+        f'<td class="number">{_e(_format_pl_number(row["unit_net"]))} {_e(data["currency"])}</td>'
+        f'<td class="number">{_e(row["tax_rate"])}</td>'
+        f'<td class="number">{_e(_format_pl_number(row["net"]))} {_e(data["currency"])}</td>'
         "</tr>"
         for row in rows
     )
     summary_html = "\n".join(
         "<tr>"
-        f"<td>{_e(item['rate'] or '')}</td><td class=\"number\">{_e(_format_pl_number(item['net'] or '0'))} {_e(data['currency'])}</td>"
-        f"<td class=\"number\">{_e(_format_pl_number(item['vat'])) + ' ' + _e(data['currency']) if item['vat'] is not None else '—'}</td>"
+        f'<td>{_e(item["rate"] or "")}</td><td class="number">{_e(_format_pl_number(item["net"] or "0"))} {_e(data["currency"])}</td>'
+        f'<td class="number">{_e(_format_pl_number(item["vat"])) + " " + _e(data["currency"]) if item["vat"] is not None else "—"}</td>'
         "</tr>"
         for item in summary
     )
@@ -509,11 +511,9 @@ def _render_classic_html(
         ("Rachunek bankowy", "bank_account"),
     ):
         if data[key]:
-            payment_fields.append(
-                f"<tr><th>{label}</th><td>{_e(data[key])}</td></tr>"
-            )
+            payment_fields.append(f"<tr><th>{label}</th><td>{_e(data[key])}</td></tr>")
     payment_html = (
-        "<section><h2>Płatność</h2><table class=\"details\">"
+        '<section><h2>Płatność</h2><table class="details">'
         + "".join(payment_fields)
         + "</table></section>"
         if payment_fields
@@ -525,7 +525,7 @@ def _render_classic_html(
         else ""
     )
     ksef = (
-        f"<p class=\"ksef\"><strong>Numer KSeF:</strong> {_e(ksef_number)}</p>"
+        f'<p class="ksef"><strong>Numer KSeF:</strong> {_e(ksef_number)}</p>'
         if ksef_number is not None
         else ""
     )
@@ -534,25 +534,25 @@ def _render_classic_html(
         for item in additional_descriptions
     )
     extra = (
-        f"<section><h2>Dodatkowe informacje</h2><table class=\"details\">{descriptions}</table></section>"
+        f'<section><h2>Dodatkowe informacje</h2><table class="details">{descriptions}</table></section>'
         if descriptions
         else ""
     )
     return f"""<!doctype html>
 <html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Faktura {_e(data['number'])}</title><style>
+<title>Faktura {_e(data["number"])}</title><style>
 * {{ box-sizing: border-box; }} body {{ margin: 10px auto; padding: 0 10px; max-width: 650px; color: #202020; background: #fff; font: 14px Arial, Helvetica, sans-serif; line-height: 1.3; }}
 h1 {{ margin: 0; font-size: 20px; }} h2 {{ margin: 0 0 5px; font-size: 14px; }} p {{ margin: 3px 0; overflow-wrap: anywhere; }} section {{ margin: 8px 0; padding: 5px 0; }}
 .meta, .parties, .items, .vat, .details {{ width: 100%; border-collapse: collapse; table-layout: fixed; }} .meta th, .meta td, .parties td, .items th, .items td, .vat th, .vat td, .details th, .details td {{ border-bottom: 1px solid #c7c7c7; padding: 4px 5px; vertical-align: top; overflow-wrap: anywhere; }}
 .meta th, .details th {{ width: 43%; text-align: left; font-weight: normal; }} .parties {{ margin: 7px 0; }} .parties td {{ width: 50%; border-bottom: 1px solid #aaa; }} .nip, .address {{ color: #444; font-size: 12px; }} .items {{ font-size: 11px; }} .items th {{ text-align: left; border-top: 1px solid #777; background: #f4f4f4; }} .items th:nth-child(1) {{ width: 7%; }} .items th:nth-child(2) {{ width: 31%; }} .items th:nth-child(3) {{ width: 14%; }} .items th:nth-child(4) {{ width: 17%; }} .items th:nth-child(5) {{ width: 11%; }} .items th:nth-child(6) {{ width: 20%; }}
 .number {{ text-align: right; font-variant-numeric: tabular-nums; }} .vat th {{ border-top: 1px solid #777; text-align: left; background: #f4f4f4; }} .due {{ margin: 7px 0; padding: 7px 0; border-top: 2px solid #444; border-bottom: 2px solid #444; text-align: right; font-size: 17px; overflow-wrap: anywhere; }} .ksef {{ margin: 5px 0; font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }}
 @page {{ size: A4; margin: 12mm; }} @media print {{ body {{ max-width: none; margin: 0; padding: 0; font-size: 10pt; }} section {{ break-inside: avoid; }} }}
-</style></head><body><h1>Faktura {_e(data['number'])}</h1>
-<table class="meta"><tr><th>Data wystawienia</th><td>{_e(data['issue_date'])}</td></tr>{delivery}</table>{ksef}
+</style></head><body><h1>Faktura {_e(data["number"])}</h1>
+<table class="meta"><tr><th>Data wystawienia</th><td>{_e(data["issue_date"])}</td></tr>{delivery}</table>{ksef}
 <table class="parties"><tr>{parties}</tr></table>{payment_html}
 <section><h2>Pozycje faktury</h2><table class="items"><thead><tr><th>Nr</th><th>Opis</th><th>Ilość / jedn.</th><th>Cena netto</th><th>VAT</th><th>Wartość netto</th></tr></thead><tbody>{line_html}</tbody></table></section>
 <section><h2>Podsumowanie VAT</h2><table class="vat"><thead><tr><th>Stawka</th><th class="number">Netto</th><th class="number">VAT</th></tr></thead><tbody>{summary_html}</tbody></table></section>
-<p class="due"><strong>Do zapłaty: {_e(_format_pl_number(data['gross']))} {_e(data['currency'])}</strong></p>{extra}</body></html>
+<p class="due"><strong>Do zapłaty: {_e(_format_pl_number(data["gross"]))} {_e(data["currency"])}</strong></p>{extra}</body></html>
 """
 
 
@@ -581,18 +581,30 @@ def render_fa3_html(
 
     data, rows, summary, additional_descriptions = _parse_invoice(xml_bytes)
     if template == "ksef":
-        effective_number = verification.ksef_number if verification is not None else ksef_number
-        panel = _verification_panel(xml_bytes, data, verification) if verification is not None else ""
+        effective_number = (
+            verification.ksef_number if verification is not None else ksef_number
+        )
+        panel = (
+            _verification_panel(xml_bytes, data, verification)
+            if verification is not None
+            else ""
+        )
         return _add_rendering_metadata(
             render_ksef_template(
-                data, rows, summary, additional_descriptions,
-                effective_number, verification_panel=panel,
+                data,
+                rows,
+                summary,
+                additional_descriptions,
+                effective_number,
+                verification_panel=panel,
             ),
             template,
         )
     if template == "classic":
         return _add_rendering_metadata(
-            _render_classic_html(data, rows, summary, additional_descriptions, ksef_number),
+            _render_classic_html(
+                data, rows, summary, additional_descriptions, ksef_number
+            ),
             template,
         )
     line_html = "\n".join(

@@ -2,49 +2,66 @@
 
 from __future__ import annotations
 
+import re
+import socket
 from base64 import b64decode, urlsafe_b64encode
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-import re
-import socket
 
-from PIL import Image
 import pytest
+from PIL import Image
 
 from render_doc import KsefVerification, render_fa3_html
-from render_doc.ksef_verification import _verification_panel, _verification_url
 from render_doc.ksef_template import render_ksef_template
+from render_doc.ksef_verification import _verification_panel, _verification_url
 
 
 @pytest.fixture
 def data():
     return {
-        "number": "SYN/2026/001", "issue_date": "2026-11-09",
-        "delivery_date": "", "seller": "Sprzedawca (NIP: 1234567890)",
-        "seller_address": ["Gdynia"], "buyer": "Nabywca (NIP: 1234567891)",
-        "buyer_address": ["Warszawa"], "gross": "123.00", "currency": "PLN",
-        "payment_due_date": "", "payment_form": "", "bank_account": "",
+        "number": "SYN/2026/001",
+        "issue_date": "2026-11-09",
+        "delivery_date": "",
+        "seller": "Sprzedawca (NIP: 1234567890)",
+        "seller_address": ["Gdynia"],
+        "buyer": "Nabywca (NIP: 1234567891)",
+        "buyer_address": ["Warszawa"],
+        "gross": "123.00",
+        "currency": "PLN",
+        "payment_due_date": "",
+        "payment_form": "",
+        "bank_account": "",
     }
 
 
-@pytest.mark.parametrize("environment,host", [
-    ("TEST", "https://qr-test.ksef.mf.gov.pl"),
-    ("DEMO", "https://qr-demo.ksef.mf.gov.pl"),
-    ("PROD", "https://qr.ksef.mf.gov.pl"),
-])
+@pytest.mark.parametrize(
+    "environment,host",
+    [
+        ("TEST", "https://qr-test.ksef.mf.gov.pl"),
+        ("DEMO", "https://qr-demo.ksef.mf.gov.pl"),
+        ("PROD", "https://qr.ksef.mf.gov.pl"),
+    ],
+)
 def test_official_kod_i_link_uses_exact_xml_bytes(environment, host):
     xml = b"<Faktura> \x00 fake but hashable </Faktura>\n"
     digest = urlsafe_b64encode(sha256(xml).digest()).rstrip(b"=").decode("ascii")
-    assert _verification_url(
-        xml, seller_nip="1234567890", issue_date="2026-11-09",
-        environment=environment,
-    ) == f"{host}/invoice/1234567890/09-11-2026/{digest}"
+    assert (
+        _verification_url(
+            xml,
+            seller_nip="1234567890",
+            issue_date="2026-11-09",
+            environment=environment,
+        )
+        == f"{host}/invoice/1234567890/09-11-2026/{digest}"
+    )
 
 
 def test_url_layout_matches_official_spec_example():
     url = _verification_url(
-        b"abc", seller_nip="1111111111", issue_date="2026-02-01",
+        b"abc",
+        seller_nip="1111111111",
+        issue_date="2026-02-01",
         environment="TEST",
     )
     assert url.startswith(
@@ -56,12 +73,16 @@ def test_url_layout_matches_official_spec_example():
 def test_xml_canonicalization_is_not_used():
     original = b"<x/>"
     first = _verification_url(
-        original, seller_nip="1234567890",
-        issue_date="2026-11-09", environment="DEMO",
+        original,
+        seller_nip="1234567890",
+        issue_date="2026-11-09",
+        environment="DEMO",
     )
     second = _verification_url(
-        b"<x />", seller_nip="1234567890",
-        issue_date="2026-11-09", environment="DEMO",
+        b"<x />",
+        seller_nip="1234567890",
+        issue_date="2026-11-09",
+        environment="DEMO",
     )
     assert first != second and original == b"<x/>"
 
@@ -69,6 +90,7 @@ def test_xml_canonicalization_is_not_used():
 def test_qr_is_offline_inline_png_and_same_link(data, monkeypatch):
     def blocked(*args, **kwargs):
         raise AssertionError("Network is forbidden in rendering")
+
     monkeypatch.setattr(socket.socket, "connect", blocked)
     xml = b"<?xml version='1.0'?><Faktura/>"
     metadata = KsefVerification("DEMO", "1234567890-20261109-SYNTHETIC")
@@ -82,7 +104,9 @@ def test_qr_is_offline_inline_png_and_same_link(data, monkeypatch):
     image = Image.open(BytesIO(png))
     assert image.format == "PNG" and image.width == image.height
     expected = _verification_url(
-        xml, seller_nip="1234567890", issue_date="2026-11-09",
+        xml,
+        seller_nip="1234567890",
+        issue_date="2026-11-09",
         environment="DEMO",
     )
     assert f'href="{expected}"' in panel
@@ -97,27 +121,32 @@ def test_png_scans_to_exact_same_kod_i_url_when_decoder_available(data):
     panel = _verification_panel(
         xml, data, KsefVerification("TEST", "1234567890-20261109-SYNTHETIC")
     )
-    png = b64decode(re.search(
-        r'src="data:image/png;base64,([A-Za-z0-9+/=]+)"', panel
-    ).group(1))
+    png = b64decode(
+        re.search(r'src="data:image/png;base64,([A-Za-z0-9+/=]+)"', panel).group(1)
+    )
     decoded, _, _ = cv2.QRCodeDetector().detectAndDecode(
         cv2.imdecode(np.frombuffer(png, dtype=np.uint8), cv2.IMREAD_COLOR)
     )
     assert decoded == _verification_url(
-        xml, seller_nip="1234567890", issue_date="2026-11-09",
+        xml,
+        seller_nip="1234567890",
+        issue_date="2026-11-09",
         environment="TEST",
     )
 
 
-@pytest.mark.parametrize("metadata", [
-    ("LIVE", "1234567890-20261109-TEST"),
-    ("prod", "1234567890-20261109-TEST"),
-    ("", "1234567890-20261109-TEST"),
-    ("DEMO", ""),
-    ("PROD", "<script>alert(1)</script>"),
-    ("TEST", "KSEF Number with spaces"),
-    ("TEST", "x" * 101),
-])
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        ("LIVE", "1234567890-20261109-TEST"),
+        ("prod", "1234567890-20261109-TEST"),
+        ("", "1234567890-20261109-TEST"),
+        ("DEMO", ""),
+        ("PROD", "<script>alert(1)</script>"),
+        ("TEST", "KSEF Number with spaces"),
+        ("TEST", "x" * 101),
+    ],
+)
 def test_rejects_untrusted_metadata(metadata):
     with pytest.raises(ValueError):
         KsefVerification(*metadata)
@@ -126,18 +155,24 @@ def test_rejects_untrusted_metadata(metadata):
 def test_rejects_bad_seller_or_issue_date():
     with pytest.raises(ValueError, match="NIP"):
         _verification_url(
-            b"abc", seller_nip="1/2345", issue_date="2026-11-09",
+            b"abc",
+            seller_nip="1/2345",
+            issue_date="2026-11-09",
             environment="TEST",
         )
     with pytest.raises(ValueError, match="date"):
         _verification_url(
-            b"abc", seller_nip="1234567890", issue_date="2026-02-30",
+            b"abc",
+            seller_nip="1234567890",
+            issue_date="2026-02-30",
             environment="TEST",
         )
     with pytest.raises(TypeError):
         _verification_url(
-            "xml", seller_nip="1234567890",
-            issue_date="2026-11-09", environment="TEST",
+            "xml",
+            seller_nip="1234567890",
+            issue_date="2026-11-09",
+            environment="TEST",
         )
 
 
@@ -160,9 +195,17 @@ def test_qr_missing_or_invalid_identity_fails_closed(data):
 
 
 def test_ksef_template_legacy_html_has_no_qr(data):
-    rows = [{"number": "1", "description": "Synthetic", "unit": "szt.",
-             "quantity": "1.00", "unit_net": "100.00", "net": "100.00",
-             "tax_rate": "23%"}]
+    rows = [
+        {
+            "number": "1",
+            "description": "Synthetic",
+            "unit": "szt.",
+            "quantity": "1.00",
+            "unit_net": "100.00",
+            "net": "100.00",
+            "tax_rate": "23%",
+        }
+    ]
     summary = [{"rate": "23%", "net": "100.00", "vat": "23.00"}]
     raw = render_ksef_template(data, rows, summary, [], "SYNTHETIC")
     assert "data:image" not in raw and 'href="' not in raw
@@ -170,7 +213,11 @@ def test_ksef_template_legacy_html_has_no_qr(data):
         b"<x/>", data, KsefVerification("TEST", "1234567890-20261109-SYNTHETIC")
     )
     html = render_ksef_template(
-        data, rows, summary, [], "1234567890-20261109-SYNTHETIC",
+        data,
+        rows,
+        summary,
+        [],
+        "1234567890-20261109-SYNTHETIC",
         verification_panel=panel,
     )
     assert "data:image/png;base64," in html
@@ -190,8 +237,7 @@ _CASES = [
 @pytest.mark.parametrize("name", _CASES)
 def test_public_api_qr_only_when_explicitly_enabled(name):
     xml = (
-        Path(__file__).resolve().parents[1]
-        / "docs/examples/classic" / f"{name}.xml"
+        Path(__file__).resolve().parents[1] / "docs/examples/classic" / f"{name}.xml"
     ).read_bytes()
     default = render_fa3_html(xml)
     classic = render_fa3_html(xml, template="classic")
@@ -217,7 +263,10 @@ def test_public_api_rejects_mismatch_or_unsupported_template():
         render_fa3_html(xml, template="default", verification=meta)
     with pytest.raises(ValueError, match="mismatch"):
         render_fa3_html(
-            xml, template="ksef", ksef_number="DIFFERENT", verification=meta,
+            xml,
+            template="ksef",
+            ksef_number="DIFFERENT",
+            verification=meta,
         )
     with pytest.raises(TypeError):
         render_fa3_html(xml, template="ksef", verification="TEST")
@@ -231,11 +280,21 @@ def test_cli_explicit_qr_options(monkeypatch, tmp_path):
         / "docs/examples/classic/01-jedna-pozycja-vat-23.xml"
     )
     output = tmp_path / "preview.html"
-    monkeypatch.setattr("sys.argv", [
-        "render-doc", str(fixture), "--output", str(output),
-        "--template", "ksef", "--qr-environment", "TEST",
-        "--ksef-number", "0000000000-20261109-SYNTHETIC",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "render-doc",
+            str(fixture),
+            "--output",
+            str(output),
+            "--template",
+            "ksef",
+            "--qr-environment",
+            "TEST",
+            "--ksef-number",
+            "0000000000-20261109-SYNTHETIC",
+        ],
+    )
     assert main() == 0
     assert "data:image/png;base64," in output.read_text(encoding="utf-8")
 
@@ -247,10 +306,19 @@ def test_cli_rejects_incomplete_qr_metadata(monkeypatch, tmp_path):
         Path(__file__).resolve().parents[1]
         / "docs/examples/classic/01-jedna-pozycja-vat-23.xml"
     )
-    monkeypatch.setattr("sys.argv", [
-        "render-doc", str(fixture), "--output", str(tmp_path / "out.html"),
-        "--template", "ksef", "--qr-environment", "PROD",
-    ])
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "render-doc",
+            str(fixture),
+            "--output",
+            str(tmp_path / "out.html"),
+            "--template",
+            "ksef",
+            "--qr-environment",
+            "PROD",
+        ],
+    )
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
