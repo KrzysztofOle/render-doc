@@ -229,10 +229,10 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
         for child in details[0].descendants("div")
         if len(child.descendants("span")) >= 2
     }
-    assert detail_values["Data wystawienia"] == _pl_date(
+    assert detail_values.get("Data wystawienia") == _pl_date(
         _source_text(invoice, "fa:P_1")
     )
-    assert detail_values["Waluta"] == _source_text(invoice, "fa:KodWaluty")
+    assert detail_values.get("Waluta") == _source_text(invoice, "fa:KodWaluty")
     delivery_date = _source_text(invoice, "fa:P_6", required=False)
     assert detail_values.get("Data dostawy lub wykonania usługi", "") == (
         _pl_date(delivery_date) if delivery_date else ""
@@ -612,6 +612,31 @@ def test_offline_pair_check_rejects_malformed_html(tmp_path: Path) -> None:
     assert _check_pair(xml_path, html_path) == ("FAIL", "HTML_MISMATCH")
 
 
+@pytest.mark.parametrize("label", ("Data wystawienia", "Waluta", "Numer faktury"))
+def test_offline_pair_check_fails_for_missing_required_html_field(
+    tmp_path: Path, label: str
+) -> None:
+    xml_path = EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml"
+    html = render_fa3_html(xml_path.read_bytes(), template="ksef")
+    if label == "Numer faktury":
+        pattern = r'<div class="invoice-number">.*?</div>'
+    else:
+        pattern = (
+            rf'<div><span class="detail-label">{re.escape(label)}</span>'
+            r'<span class="detail-value">.*?</span></div>'
+        )
+    mutated_html, count = re.subn(pattern, "", html, count=1)
+    assert count == 1
+    pair_xml_path = tmp_path / "source.xml"
+    pair_html_path = tmp_path / "missing-field.html"
+    pair_xml_path.write_bytes(xml_path.read_bytes())
+    pair_html_path.write_text(mutated_html, encoding="utf-8")
+    assert _check_pair(pair_xml_path, pair_html_path) == (
+        "FAIL",
+        "HTML_MISMATCH",
+    )
+
+
 def test_offline_pair_check_classifies_unsupported_profile(tmp_path: Path) -> None:
     xml_bytes = (
         (EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml")
@@ -649,13 +674,10 @@ def test_offline_pair_check_classifies_unknown_field_as_unsupported(
     )
 
 
-def test_offline_cli_prints_only_safe_status(tmp_path: Path) -> None:
-    xml_path = EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml"
-    html_path = tmp_path / "rendered.html"
-    html_path.write_text(
-        render_fa3_html(xml_path.read_bytes(), template="ksef"), encoding="utf-8"
-    )
-    result = subprocess.run(
+def _run_offline_cli(
+    xml_path: Path, html_path: Path
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         [
             sys.executable,
             str(Path(__file__).resolve()),
@@ -669,24 +691,64 @@ def test_offline_cli_prints_only_safe_status(tmp_path: Path) -> None:
         text=True,
         check=False,
     )
+
+
+def test_offline_cli_prints_only_safe_status(tmp_path: Path) -> None:
+    xml_path = EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml"
+    html_path = tmp_path / "rendered.html"
+    html_path.write_text(
+        render_fa3_html(xml_path.read_bytes(), template="ksef"), encoding="utf-8"
+    )
+    result = _run_offline_cli(xml_path, html_path)
     assert result.returncode == 0
-    assert result.stdout.strip() == "PASS SOURCE_FIELDS_MATCH"
+    assert result.stdout == "PASS SOURCE_FIELDS_MATCH\n"
     assert not result.stderr
 
     html_path.write_text(
         html_path.read_text(encoding="utf-8").replace("0000000000", "9999999999", 1),
         encoding="utf-8",
     )
-    failed = subprocess.run(
-        result.args,
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    failed = _run_offline_cli(xml_path, html_path)
     assert failed.returncode == 1
-    assert failed.stdout.strip() == "FAIL HTML_MISMATCH"
+    assert failed.stdout == "FAIL HTML_MISMATCH\n"
     assert not failed.stderr
+
+
+@pytest.mark.parametrize("label", ("Data wystawienia", "Waluta"))
+def test_offline_cli_missing_html_fields_fail_without_data_leaks(
+    tmp_path: Path, label: str
+) -> None:
+    xml_path = EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml"
+    html = render_fa3_html(xml_path.read_bytes(), template="ksef")
+    pattern = (
+        rf'<div><span class="detail-label">{re.escape(label)}</span>'
+        r'<span class="detail-value">.*?</span></div>'
+    )
+    mutated_html, count = re.subn(pattern, "", html, count=1)
+    assert count == 1
+    html_path = tmp_path / "missing-field.html"
+    html_path.write_text(mutated_html, encoding="utf-8")
+    result = _run_offline_cli(xml_path, html_path)
+    assert result.returncode == 1
+    assert result.stdout == "FAIL HTML_MISMATCH\n"
+    assert "Traceback" not in result.stdout + result.stderr
+    assert not result.stderr
+
+
+def test_offline_cli_preserves_unsupported_status_and_exit_code(tmp_path: Path) -> None:
+    source = (EXAMPLES / f"{EXAMPLE_NAMES[0]}.xml").read_bytes()
+    unsupported = source.replace(
+        b"<RodzajFaktury>VAT</RodzajFaktury>",
+        b"<RodzajFaktury>KOR</RodzajFaktury>",
+    )
+    xml_path = tmp_path / "unsupported.xml"
+    html_path = tmp_path / "page.html"
+    xml_path.write_bytes(unsupported)
+    html_path.write_text("<html></html>", encoding="utf-8")
+    result = _run_offline_cli(xml_path, html_path)
+    assert result.returncode == 2
+    assert result.stdout == "UNSUPPORTED PROFILE_UNSUPPORTED\n"
+    assert not result.stderr
 
 
 if __name__ == "__main__":
