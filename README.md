@@ -4,6 +4,15 @@ Samodzielny pakiet Python do lokalnego renderowania ograniczonego profilu
 podstawowej faktury KSeF FA(3) do kompletnego HTML. Renderowanie działa
 offline i nie wymaga KSeF_2 ani Comarch ERP Optima.
 
+## Kandydat 0.3.0
+
+Rozszerza `render_fa3_html` o prezentację aktywnego zwolnienia z podstawą
+`P_19A`, `P_19B` albo `P_19C`. Tabela VAT szablonu `ksef` pokazuje brutto
+równe netto w grupach 0% i `zw`. Szablony, parametry API, rodzaje błędów
+i licencja Apache-2.0 pozostają zgodne z 0.2.0.
+Kandydat jest przeznaczony do lokalnej kwalifikacji. Jego HTML nadal wymaga
+osobnej kwalifikacji, jeśli ma zostać użyty jako `DKF_Html` Optimy.
+
 ## Obsługiwany zakres
 
 Obsługiwany profil obejmuje dokument z nagłówkiem FA(3), podstawową fakturę

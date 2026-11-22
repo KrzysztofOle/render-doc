@@ -153,7 +153,9 @@ def _validate_annotations(invoice: etree._Element) -> dict[str, str] | None:
     if names == ["P_19N"] and _text(exemption, "P_19N") == "1":
         return None
     if (
-        len(names) != 2 or names[0] != "P_19" or names[1] not in _EXEMPTION_BASES
+        len(names) != 2
+        or names[0] != "P_19"
+        or names[1] not in _EXEMPTION_BASES
         or any(len(child) or child.attrib for child in fields)
         or _text(exemption, "P_19") != "1"
     ):

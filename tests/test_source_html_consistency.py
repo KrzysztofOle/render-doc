@@ -275,7 +275,9 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
             else ""
         )
         gross = str(Decimal(net) + Decimal(tax)) if tax else net
-        summaries.append((label, _pl_number(net), _pl_number(tax) if tax else "—", _pl_number(gross)))
+        summaries.append(
+            (label, _pl_number(net), _pl_number(tax) if tax else "—", _pl_number(gross))
+        )
     summary_tables = _class_nodes(root, "vat-summary")
     assert len(summary_tables) == 1
     summary_rows = [
