@@ -1,7 +1,8 @@
 # Kwalifikacja kandydata render-doc 0.3.0
 
 2026-11-22. **RELEASE_CANDIDATE_READY** w zakresie technicznym.
-Artefakty pochodzą z rewizji `69d4ad6b41bba99fd285f3e65178bfaefb31d09f`.
+Proponowany tag to `v0.3.0`. Finalna rewizja i sumy obu artefaktów są
+w pakiecie decyzji `P0-RELEASE-FINALIZATION-01` w repozytorium Connectora.
 
 - Publiczne `render_fa3_html` działa z dotychczasowymi parametrami i
   wyjątkami. Kandydat prezentuje jedną aktywną podstawę zwolnienia A, B
@@ -10,16 +11,41 @@ Artefakty pochodzą z rewizji `69d4ad6b41bba99fd285f3e65178bfaefb31d09f`.
 - Pełna regresja na Pythonie 3.10.21 w Linuksie dała 179 PASS
   i 90,10% pokrycia gałęzi i instrukcji. Obejmuje niezależne dekodowanie
   QR, porównanie XML z widocznym HTML, polskie znaki, białe znaki, długie
-  opisy, escapowanie, brak DTD i zewnętrznych zasobów. Na Windows Python
-  3.12.10 było 178 PASS i 1 SKIP opcjonalnego dekodera OpenCV.
+  opisy, escapowanie, brak DTD i zewnętrznych zasobów. Końcowa regresja
+  Windows na Pythonie 3.12.10 z OpenCV 4.13.0 dała 179 PASS i 90,10%.
 - Wheel i sdist sprawdzono pod kątem metadanych, wymaganych plików i
   sekretów. Obie formy przechodzą instalację i import spoza checkoutu.
   Metadane i dołączony plik wskazują Apache-2.0. [Licencja](../LICENSE).
 
-| Artefakt | SHA-256 |
-| --- | --- |
-| `render_doc-0.3.0-py3-none-any.whl` | `1aa79f57bde11cd1d8dbbd8aff17b080ac4a4fe238beac5d7cecd6d494f941d6` |
-| `render_doc-0.3.0.tar.gz` | `50a75c91bf631d7280c289b21164dcb8086a4a2afb5b3c0f3f26d953a05bfe35` |
+Końcowa poprawka zachowuje bezpośrednie uruchamianie narzędzia QA i
+import kodu z checkoutu. Dotyczy kolejności importu w teście. Runtime,
+szablony, podpis funkcji i typy wyjątków mają ten sam kontrakt.
+Pełny Ruff przechodzi.
 
-Brak dowodu zgodności z polem `DKF_Html` Optimy. Tag, push i Release
-pozostają przedmiotem osobnej decyzji właściciela.
+## Zmiany od 0.2.0
+
+- Szablony prezentują jedną aktywną podstawę zwolnienia `P_19A/B/C`.
+  Brutto grup 0% i `zw` korzysta z kwoty netto ze źródła. Profil obejmuje
+  udokumentowane kombinacje 23%, 8%, 5%, 0% i `zw`.
+- Porównanie lokalnej pary XML i HTML sprawdza wartości księgowe w
+  odpowiadających sekcjach. Subprocess zwraca bezpieczny status i kod
+  przyczyny.
+- Metadane dystrybucji wskazują 0.3.0 i dołączoną licencję Apache-2.0.
+
+## Pakiet decyzji
+
+Do publikacji zatwierdzić osobno dokładny commit, tag `v0.3.0`, Release,
+`render_doc-0.3.0-py3-none-any.whl` i `render_doc-0.3.0.tar.gz`.
+Sumy porównać z końcowym raportem. Zbudowanie z eksportu Git można
+odtworzyć przez `git archive` i `uv build --offline`; czasy kontenerów
+mogą się różnić.
+
+Po publikacji sprawdzić peeled SHA tagu i pochodzenie PEP 610.
+Zaktualizować pin w izolowanym środowisku, uruchomić `pip check`,
+macierz VAT i admission, następnie podjąć decyzję o promocji pinu.
+Jeśli walidacja zawiedzie, przywrócić poprzedni TOML i zainstalować
+render-doc 0.2.0 z commita `6596bfc7efcb98c45253b00be403a9e2eac26d0c`.
+Powtórzyć kontrolę instalacji i źródła Git.
+
+Kwalifikacja obejmuje HTML i QR. Zgodność z polem `DKF_Html` Optimy
+wymaga własnego dowodu.

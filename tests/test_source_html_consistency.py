@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from html.parser import HTMLParser
+from importlib import import_module
 from pathlib import Path
 from typing import ClassVar
 from xml.etree import ElementTree
@@ -31,11 +32,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from render_doc import (
-    InvalidXmlError,
-    UnsupportedDocumentError,
-    render_fa3_html,
-)
+render_doc = import_module("render_doc")
+InvalidXmlError = render_doc.InvalidXmlError
+UnsupportedDocumentError = render_doc.UnsupportedDocumentError
+render_fa3_html = render_doc.render_fa3_html
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "docs" / "examples" / "classic"
 NAMESPACE = "http://crd.gov.pl/wzor/2025/06/25/13775/"
