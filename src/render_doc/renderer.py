@@ -107,12 +107,19 @@ def _fa3_date(parent: etree._Element, name: str) -> str:
     return value
 
 
-def _validate_annotations(invoice: etree._Element) -> None:
+_EXEMPTION_BASES = {
+    "P_19A": "Podstawa zwolnienia z VAT (ustawa lub akt wykonawczy)",
+    "P_19B": "Podstawa zwolnienia z VAT (dyrektywa 2006/112/WE)",
+    "P_19C": "Podstawa zwolnienia z VAT (inna podstawa prawna)",
+}
+
+
+def _validate_annotations(invoice: etree._Element) -> dict[str, str] | None:
     annotations = invoice.findall(_qualified(invoice, "Adnotacje"))
     if len(annotations) > 1:
         raise UnsupportedDocumentError("Pole Adnotacje występuje wielokrotnie.")
     if not annotations:
-        return
+        return None
     node = annotations[0]
     _children(
         node,
@@ -132,17 +139,29 @@ def _validate_annotations(invoice: etree._Element) -> None:
             raise UnsupportedDocumentError(
                 f"Obsługiwana jest wyłącznie nieaktywna wartość 2 w polu {field}."
             )
-    for group, marker in (
-        ("Zwolnienie", "P_19N"),
-        ("NoweSrodkiTransportu", "P_22N"),
-        ("PMarzy", "P_PMarzyN"),
-    ):
+    for group, marker in (("NoweSrodkiTransportu", "P_22N"), ("PMarzy", "P_PMarzyN")):
         child = _one(node, group)
         _children(child, {marker})
         if _text(child, marker) != "1":
             raise UnsupportedDocumentError(
                 f"Obsługiwany jest wyłącznie znacznik braku {marker}=1."
             )
+    exemption = _one(node, "Zwolnienie")
+    _children(exemption, {"P_19", "P_19N", *_EXEMPTION_BASES})
+    fields = [child for child in exemption if isinstance(child.tag, str)]
+    names = [etree.QName(child).localname for child in fields]
+    if names == ["P_19N"] and _text(exemption, "P_19N") == "1":
+        return None
+    if (
+        len(names) != 2 or names[0] != "P_19" or names[1] not in _EXEMPTION_BASES
+        or any(len(child) or child.attrib for child in fields)
+        or _text(exemption, "P_19") != "1"
+    ):
+        raise UnsupportedDocumentError("Wymagane P_19=1 i jedna podstawa lub P_19N=1.")
+    basis = fields[1].text or ""
+    if not basis.strip():
+        raise UnsupportedDocumentError(f"Pole {names[1]} jest puste.")
+    return {"key": _EXEMPTION_BASES[names[1]], "value": basis}
 
 
 def _additional_descriptions(
@@ -368,8 +387,12 @@ def _parse_invoice(
     delivery_date = (
         _fa3_date(invoice, "P_6") if invoice.findall(_qualified(invoice, "P_6")) else ""
     )
-    _validate_annotations(invoice)
+    exemption = _validate_annotations(invoice)
     additional_descriptions = _additional_descriptions(invoice)
+    if exemption is not None:
+        if "zw" not in observed_rates:
+            raise UnsupportedDocumentError("P_19 wymaga pozycji ze stawką zw.")
+        additional_descriptions.insert(0, exemption)
     payment_due_date, payment_form, bank_account = _payment_data(invoice)
     summary: list[dict[str, str | None]] = []
     for code, (label, net_field, tax_field) in _VAT_RATES.items():

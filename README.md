@@ -27,7 +27,11 @@ bez przeliczania.
 To ograniczony profil, a nie walidator XSD ani pełna obsługa FA(3). Renderer
 prezentuje opcjonalne `P_6` jako osobną datę dostawy lub wykonania usługi,
 zachowując je także wtedy, gdy jest równe `P_1`. Weryfikuje zamknięty zestaw
-nieaktywnych oznaczeń `Adnotacje` i prezentuje ogólne wpisy `DodatkowyOpis`
+nieaktywnych oznaczeń `Adnotacje` poza zwolnieniem. Dla `P_19=1` i pozycji
+`zw` wyświetla dokładny tekst oraz rodzaj jednej podstawy prawnej `P_19A`,
+`P_19B` lub `P_19C`. Odrzuca pustą podstawę, kilka podstaw i sprzeczny
+znacznik `P_19N`. Dotychczasowy podgląd źródeł z `P_19N=1` pozostaje dostępny.
+Renderer prezentuje też ogólne wpisy `DodatkowyOpis`
 złożone z `Klucz` i `Wartosc`; warianty przypisane do wierszy są odrzucane.
 W `Platnosc` obsługuje tylko jeden `TerminPlatnosci` zawierający wyłącznie
 jedno pole `Termin`; opcjonalne `FormaPlatnosci` jest akceptowane wyłącznie

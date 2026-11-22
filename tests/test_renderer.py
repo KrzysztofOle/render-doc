@@ -454,6 +454,37 @@ def test_annotations_reject_active_unknown_or_invalid_values(
         render_fa3_html(invoice_xml.replace(source, replacement))
 
 
+@pytest.mark.parametrize("template", ("default", "classic", "ksef"))
+@pytest.mark.parametrize("basis", ("P_19A", "P_19B", "P_19C"))
+def test_active_exemption_renders_its_legal_basis(invoice_xml, template, basis):
+    xml = invoice_xml.replace(b"<P_12>23</P_12>", b"<P_12>zw</P_12>").replace(
+        b"<P_13_1>100.00</P_13_1><P_14_1>23.00</P_14_1><P_15>123.00</P_15>",
+        b"<P_13_7>100.00</P_13_7><P_15>100.00</P_15>",
+    ).replace(
+        b"<P_19N>1</P_19N>",
+        f"<P_19>1</P_19><{basis}>art.  43 &amp; &lt;podstawa&gt;</{basis}>".encode(),
+    )
+    html = render_fa3_html(xml, template=template)
+    assert "Podstawa zwolnienia z VAT" in html
+    assert "art.  43 &amp; &lt;podstawa&gt;" in html
+    assert "zwolniona" in html
+
+
+@pytest.mark.parametrize(
+    ("annotation", "message"),
+    (
+        ("<P_19>1</P_19><P_19A> </P_19A>", "P_19A"),
+        ("<P_19>1</P_19><P_19A>art. 43</P_19A><P_19B>art. 132</P_19B>", "P_19"),
+        ("<P_19>1</P_19><P_19A>art. 43</P_19A><P_19N>1</P_19N>", "P_19"),
+        ("<P_19>1</P_19><P_19A>art. 43</P_19A>", "stawka|stawką"),
+        ("<P_19>1</P_19><P_19A>art. 43<Extra/></P_19A>", "P_19"),
+    ),
+)
+def test_invalid_exemption_annotation_is_refused(invoice_xml, annotation, message):
+    with pytest.raises(UnsupportedDocumentError, match=message):
+        render_fa3_html(invoice_xml.replace(b"<P_19N>1</P_19N>", annotation.encode()))
+
+
 def test_additional_description_html_is_escaped(invoice_xml: bytes) -> None:
     altered = invoice_xml.replace(
         b"<Klucz>Warunki</Klucz><Wartosc>Standardowe</Wartosc>",

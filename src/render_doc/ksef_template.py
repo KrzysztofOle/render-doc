@@ -67,11 +67,7 @@ def _gross_by_rate(entry: dict[str, str | None]) -> str:
         return "—"
     if tax is None:
         # The restricted parser accepts missing tax only for 0% or exempt sales.
-        return (
-            _pl_decimal(net)
-            if entry["rate"] in ("0 KR", "0 WDT", "0 EX", "zw")
-            else "—"
-        )
+        return _pl_decimal(net)
     precision = max(
         0,
         -Decimal(net).as_tuple().exponent,

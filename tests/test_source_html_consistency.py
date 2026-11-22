@@ -262,7 +262,7 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
         )
         assert tuple(cell.text for cell in cells) == expected
 
-    summaries: list[tuple[str, str, str]] = []
+    summaries: list[tuple[str, str, str, str]] = []
     seen_rates = {_source_text(row, "fa:P_12") for row in source_rows}
     for source_rate, (label, net_field, tax_field) in VAT_RATES.items():
         net = _source_text(invoice, f"fa:{net_field}", required=False)
@@ -274,7 +274,8 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
             if tax_field
             else ""
         )
-        summaries.append((label, _pl_number(net), _pl_number(tax) if tax else "—"))
+        gross = str(Decimal(net) + Decimal(tax)) if tax else net
+        summaries.append((label, _pl_number(net), _pl_number(tax) if tax else "—", _pl_number(gross)))
     summary_tables = _class_nodes(root, "vat-summary")
     assert len(summary_tables) == 1
     summary_rows = [
@@ -283,7 +284,7 @@ def assert_supported_source_matches_ksef_html(xml_bytes: bytes, html: str) -> No
     assert len(summary_rows) == len(summaries)
     for row, expected in zip(summary_rows, summaries, strict=True):
         cells = row.descendants("td")
-        assert tuple(cell.text for cell in cells[:3]) == expected
+        assert tuple(cell.text for cell in cells) == expected
 
     amount_due = _class_nodes(root, "amount-due")
     assert len(amount_due) == 1
